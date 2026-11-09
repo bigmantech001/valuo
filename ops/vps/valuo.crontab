@@ -1,0 +1,11 @@
+# Valuo scheduled jobs. Installed by ops/vps/setup.sh, which replaces __REPO__ with the checkout path.
+# Times are UTC: setup.sh sets CRON_TZ and checks the server clock. Logs: ~/valuo-logs/<date>-<job>.log.
+# The terminal's History tab reads the schedule from this file.
+CRON_TZ=UTC
+SHELL=/bin/bash
+
+# Daily canonical snapshot: live mainnet + quote race + 10,000-path Monte Carlo, tests, history, commit, push.
+5 6 * * * __REPO__/ops/vps/valuo-run.sh snapshot
+
+# Hourly quote race: 1Click vs Relay, LI.FI and Across; appended to artifacts/history, commit, push.
+17 * * * * __REPO__/ops/vps/valuo-run.sh bench
