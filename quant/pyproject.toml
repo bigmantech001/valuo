@@ -1,0 +1,30 @@
+[project]
+name = "valuo"
+version = "0.1.0"
+description = "Valuo: reproducible NEAR investment-committee quant engine (live collectors, supply physics, SOTP Monte Carlo, bear case)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "duckdb>=1.0",
+    "python-dotenv>=1.0",
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["valuo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "live: touches live network endpoints; skipped unless VALUO_LIVE_TESTS=1",
+]
