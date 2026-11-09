@@ -20,7 +20,7 @@ shasum -a 256 artifacts/latest_snapshot.json   # must equal manifest.json: snaps
 cd web && npm install && npm run dev            # the IC terminal reads ../artifacts
 ```
 
-Time series (optional, also key-free). `make reproduce` appends every canonical run to `artifacts/history/snapshots.jsonl` (de-duplicated by snapshot SHA-256) and rebuilds `artifacts/history/summary.json`; the targets below drive the store directly:
+Time series (optional, also key-free). `make reproduce` appends every canonical run to `artifacts/history/snapshots.jsonl` (de-duplicated by snapshot SHA-256) and rebuilds `artifacts/history/summary.json`; a VPS runs the daily snapshot and an hourly quote race on cron and commits them back (`docs/VPS.md`, `ops/vps/`); the targets below drive the store directly:
 
 ```bash
 make history          # append the current canonical snapshot to artifacts/history/ (no-op if already recorded)

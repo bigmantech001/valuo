@@ -57,7 +57,7 @@ We list these ourselves; none of them is hidden in the UI or the memo.
 - Native BTC: 1Click does not out-deliver Relay on the corridors we sample; the claim is graded NOT_SUPPORTED.
 - Peer set for relative value is three chains.
 - NearBlocks' free tier limits the solver sample; its span and confidence interval are reported, and the trigger reads "inconclusive" below the minimum span.
-- Daily and hourly history begins when the GitHub Actions start running; early series have few points, and the History tab says so.
+- Daily and hourly history comes from scheduled jobs on a VPS (`docs/VPS.md`); early series have few points, and the History tab says so.
 
 ## 5. Where things are
 
@@ -73,4 +73,4 @@ We list these ourselves; none of them is hidden in the UI or the memo.
 | `quant/tests/` | Unit tests and invariant checks (`make test`). |
 | `web/` | Next.js terminal; it only reads `artifacts/`. |
 | `docs/MODEL_DESIGN.md` | Field contract and modelling decisions. |
-| `.github/workflows/` | Daily canonical run and hourly quote race. |
+| `ops/vps/`, `docs/VPS.md` | Daily canonical run and hourly quote race (cron on a VPS; schedule in `ops/vps/valuo.crontab`). |
