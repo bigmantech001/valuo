@@ -1,0 +1,46 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+quant/.venv/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Generated artifacts ---
+# Committed: latest_snapshot.json, manifest.json, IC_MEMO.md, raw/ (the manifest's SHA-256s must be verifiable from
+# the repo) and history/ (time series + gzipped raw quote responses). Ignored: dev/smoke runs and DuckDB files.
+artifacts/dev/
+artifacts/*.duckdb
+artifacts/*.duckdb.wal
+*.duckdb
+!artifacts/latest_snapshot.json
+!artifacts/manifest.json
+!artifacts/IC_MEMO.md
+
+# --- Vendored skills ---
+vendor/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
