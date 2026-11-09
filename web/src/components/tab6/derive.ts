@@ -4,7 +4,7 @@ import { fmtInt, fmtNum, NA } from "@/lib/format";
 import type { SeriesBlock, SeriesStats } from "@/lib/history";
 
 /**
- * Pure helpers for Tab 6 (history), plus one server-side read of the GitHub Actions workflow
+ * Pure helpers for Tab 6 (history), plus one server-side read of the VPS crontab
  * files so the cadence quoted in the UI is the schedule actually committed, not a typed-in claim.
  */
 
@@ -67,32 +67,28 @@ function describeCron(cron: string): { plain: string; per: string | null } {
 }
 
 /**
- * Reads the `cron:` line of each .github/workflows/*.yml and classifies the workflow as the snapshot or
- * the bench job by the command it runs. The repo root is the parent of the web app (the same root
- * `artifactsDir()` defaults to). Returns {} when the folder is absent (e.g. a deploy
- * that ships only web/), in which case the UI says the schedule could not be read.
+ * Reads the job schedule from ops/vps/valuo.crontab (the scheduled runs live on a VPS, installed by
+ * ops/vps/setup.sh) and classifies each line as the snapshot or the bench job by the command it runs.
+ * The repo root is the parent of the web app (the same root `artifactsDir()` defaults to); deployments
+ * rooted at web/ read the build-time copy in .valuo-data. Returns {} when the file is absent, in which
+ * case the UI says the schedule could not be read.
  */
 export async function readWorkflowSchedules(): Promise<{ snapshot?: WorkflowSchedule; bench?: WorkflowSchedule }> {
-  const sibling = path.resolve(process.cwd(), "..", ".github", "workflows");
-  const dir = existsSync(sibling) ? sibling : path.resolve(process.cwd(), ".valuo-data", ".github", "workflows");
+  const rel = path.join("ops", "vps", "valuo.crontab");
+  const sibling = path.resolve(process.cwd(), "..", rel);
+  const file = existsSync(sibling) ? sibling : path.resolve(process.cwd(), ".valuo-data", rel);
   const out: { snapshot?: WorkflowSchedule; bench?: WorkflowSchedule } = {};
-  let files: string[];
+  let text: string;
   try {
-    files = (await fs.readdir(dir)).filter((f) => /\.ya?ml$/.test(f));
+    text = await fs.readFile(file, "utf8");
   } catch {
     return out;
   }
-  for (const file of files) {
-    try {
-      const text = await fs.readFile(path.join(dir, file), "utf8");
-      const m = text.match(/^\s*-\s*cron:\s*["']([^"']+)["']/m);
-      if (!m) continue;
-      // Classify by the command the job runs, not by the file name.
-      const kind = /bench-history|valuo\.history bench/.test(text) ? "bench" : /valuo\.history snapshot|make history\b/.test(text) ? "snapshot" : null;
-      if (kind && !out[kind]) out[kind] = { file: `.github/workflows/${file}`, cron: m[1], ...describeCron(m[1]) };
-    } catch {
-      // unreadable workflow file: skip it; the UI reports the missing schedule
-    }
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*((?:\S+\s+){4}\S+)\s+\S*valuo-run\.sh\s+(snapshot|bench)\b/);
+    if (!m) continue;
+    const kind = m[2] as "snapshot" | "bench";
+    if (!out[kind]) out[kind] = { file: "ops/vps/valuo.crontab", cron: m[1], ...describeCron(m[1]) };
   }
   return out;
 }

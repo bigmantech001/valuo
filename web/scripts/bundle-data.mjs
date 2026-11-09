@@ -18,7 +18,7 @@ if (existsSync(artifacts)) {
     filter: (src) => !src.includes(`${path.sep}dev`) && !src.endsWith(".duckdb") && !src.endsWith(".duckdb.wal"),
   });
 }
-const workflows = path.join(repo, ".github", "workflows");
-if (existsSync(workflows)) cpSync(workflows, path.join(out, ".github", "workflows"), { recursive: true });
+const crontab = path.join(repo, "ops", "vps", "valuo.crontab");
+if (existsSync(crontab)) cpSync(crontab, path.join(out, "ops", "vps", "valuo.crontab"));
 
-console.log(`bundle-data: ${existsSync(artifacts) ? "artifacts" : "no artifacts"}, ${existsSync(workflows) ? "workflows" : "no workflows"} -> ${path.relative(web, out)}`);
+console.log(`bundle-data: ${existsSync(artifacts) ? "artifacts" : "no artifacts"}, ${existsSync(crontab) ? "crontab" : "no crontab"} -> ${path.relative(web, out)}`);

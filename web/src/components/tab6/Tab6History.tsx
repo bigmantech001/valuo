@@ -283,7 +283,7 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
               the canonical snapshot runs {schedules.snapshot.plain} (<code>{schedules.snapshot.file}</code>)
             </>
           ) : (
-            "the snapshot workflow could not be read from .github/workflows/"
+            "the snapshot schedule could not be read from ops/vps/valuo.crontab"
           )}
           ;{" "}
           {schedules.bench ? (
@@ -291,9 +291,9 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
               the quote race runs {schedules.bench.plain} (<code>{schedules.bench.file}</code>)
             </>
           ) : (
-            "the race workflow could not be read from .github/workflows/"
+            "the race schedule could not be read from ops/vps/valuo.crontab"
           )}
-          . Both commit their output back to the repository, so the series grows once the repository is published with Actions enabled.
+          . Both jobs run on a VPS (ops/vps/setup.sh installs them) and commit their output back to the repository, so the series grows by one point per day and one race per hour.
         </p>
         <p>
           Statistics: {sum.ci_method ?? "no CI method recorded"}. Medians, ranges and changes are over non-null observations in time order; a run that did not measure a metric leaves a gap rather than a zero. Race
