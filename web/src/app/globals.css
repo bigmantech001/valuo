@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/*
+ * Valuo design tokens: a light research-report palette.
+ *
+ * Paper background, near-black ink, a single deep-blue accent for links and interactive state,
+ * and colour on numbers only where the sign carries meaning:
+ *   emerald = favourable sign, crimson = unfavourable sign, amber = assumption / caution.
+ * Token names are hue families, not decoration; keep everything else in ink and greys.
+ */
+@theme {
+  --color-canvas: #fbfaf7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f2ec;
+  --color-border: #e6e2d8;
+  --color-border-strong: #cfc9bb;
+  --color-ink: #16150f;
+  --color-muted: #5b584f;
+  --color-dim: #8a8679;
+  --color-emerald: #1f7a4d;
+  --color-amber: #9a6a00;
+  --color-crimson: #b3261e;
+  --color-accent: #1f4fbf;
+}
+
+@theme inline {
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Tabular figures for any numeric cell. */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility hairline {
+  border-width: 1px;
+  border-color: var(--color-border);
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Range input: thin track, round thumb in ink. */
+input[type="range"].valuo-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border-strong);
+  outline: none;
+}
+input[type="range"].valuo-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-ink);
+  cursor: pointer;
+}
+input[type="range"].valuo-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  border: 2px solid var(--color-surface);
+  cursor: pointer;
+}
+input[type="range"].valuo-range:focus-visible {
+  outline: none;
+}
+input[type="range"].valuo-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* Thin scrollbars for wide tables / drawers. */
+.valuo-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.valuo-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+@keyframes valuo-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.valuo-skeleton {
+  background: var(--color-surface-2);
+  animation: valuo-pulse 1.4s ease-in-out infinite;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+}
