@@ -35,8 +35,8 @@ README_FINDINGS_END = "<!-- VALUO:FINDINGS:END -->"
 NA = "n/a"
 # Memo section numbers (one place, so cross-references never drift when sections move).
 SEC: dict[str, int] = {
-    "summary": 1, "market": 2, "believe": 3, "relval": 4, "model": 5, "micro": 6, "conc": 7, "supply": 8,
-    "sotp": 9, "bear": 10, "score": 11, "assumptions": 12, "reproduce": 13, "provenance": 14,
+    "bull": 1, "summary": 2, "market": 3, "believe": 4, "relval": 5, "model": 6, "micro": 7, "conc": 8, "supply": 9,
+    "sotp": 10, "bear": 11, "score": 12, "assumptions": 13, "reproduce": 14, "provenance": 15,
 }
 _REGIME_LABEL = {"status_quo": "status quo (cap flat)", "svrn_glidepath": "SVRN glidepath", "custom_cap": "custom cap"}
 _CLASS_LABEL = {
@@ -611,7 +611,7 @@ def _section_sotp(snap: Snapshot) -> str:
         ["Public take t=0 (gross)", fmt_bps(cal.get("tau_pub_start_bps")), str(cal.get("tau_pub_start_method") or NA)],
         ["Blended gross take / net take", f"{fmt_bps(cal.get('blended_gross_take_bps'))} / {fmt_bps(cal.get('net_take_start_bps'))}", "DefiLlama near-intents fees / volume; net = gross x alpha"],
         ["Capture ratio alpha", fmt_pct(cal.get("alpha_capture"), 2), str(cal.get("alpha_source") or NA)],
-        ["Confidential take t=0", fmt_bps(cal.get("tau_conf_start_bps"), 0), "assumption (no live confidential fee series)"],
+        ["Confidential take t=0", fmt_bps(cal.get("tau_conf_start_bps"), 0), cal.get("tau_conf_source") or "assumption (no live confidential fee series)"],
         ["Public take floor", fmt_bps(cal.get("tau_floor_bps")), f"{cal.get('tau_floor_source')}; cross-VM headroom {fmt_bps(cal.get('headroom_cross_vm_bps'), signed=True)}, competitor ceiling {fmt_bps(cal.get('competitive_fee_ceiling_bps'))}"],
         ["Compression lambda (public / confidential)", f"{fmt_num(cal.get('lambda_pub_monthly'), 3)} / {fmt_num(cal.get('lambda_conf_monthly'), 3)} per month", "geometric reversion to the floor"],
         ["Volume growth (public / confidential, monthly)", f"{fmt_pct(cal.get('growth_monthly_pub'), 2)} / {fmt_pct(cal.get('growth_monthly_conf'), 2)}", f"confidential share {fmt_pct(cal.get('confidential_share_start'), 1)} -> {fmt_pct(cal.get('confidential_share_target'), 0)} target"
@@ -1225,6 +1225,51 @@ def _section_relval(snap: Snapshot) -> str:
     return "\n".join(parts)
 
 
+_BULL_STATUS = {"on_track": "On track", "behind": "Behind", "against": "Against", "not_measured": "Not measured"}
+
+
+def _bull_value(x: Any, unit: str) -> str:
+    if unit == "ratio_yoy":
+        return f"{fmt_pct(x, 0)} a year"
+    if unit == "ratio":
+        return fmt_pct(x, 1)
+    if unit == "usd_per_year":
+        return f"{fmt_usd(x)} a year"
+    if unit == "usd_per_day":
+        return f"{fmt_usd(x)} a day"
+    if unit == "usd":
+        return fmt_usd(x)
+    if unit == "bps":
+        return fmt_bps(x, 2, signed=True)
+    if unit == "x":
+        return fmt_mult(x, 0)
+    if unit == "hhi":
+        return fmt_int(x)
+    return fmt_num(x)
+
+
+def _section_bull(snap: Snapshot) -> str:
+    bc = getattr(snap, "bull_case", None) or {}
+    if not isinstance(bc, dict) or not bc.get("conditions"):
+        return "_The bull-case scorecard was not computed this run (see warnings)._"
+    rows = []
+    for c in bc["conditions"]:
+        tr = c.get("trend") or {}
+        trend = f"{fmt_pct(tr.get('change'), 0, signed=True)} ({tr.get('label')})" if tr else "n/a"
+        req = ("> 0" if c.get("key") in ("pricing_power", "confidential_growth") else
+               "<= " + _bull_value(c.get("required"), c.get("unit", "")) if c.get("key") == "solver_competition" else
+               _bull_value(c.get("required"), c.get("unit", "")))
+        rows.append([c.get("statement"), req, _bull_value(c.get("live"), c.get("unit", "")), trend, f"**{_BULL_STATUS.get(c.get('status'), c.get('status'))}**"])
+    return "\n\n".join([
+        bc.get("headline", ""),
+        _table(["Condition", "Required", "Live", "Trend", "Status"], rows, ["l", "r", "r", "l", "l"]),
+        ("How to read it: each requirement is what the market price needs if that condition alone carries the case (from the "
+         f"reverse valuation in section {SEC['market']}), or the threshold the bear case watches (section {SEC['bear']}). "
+         "An investor holding NEAR long-term is betting that the conditions marked Behind close; the ones marked Against "
+         "are where the case is currently losing. Re-run `make reproduce` to re-grade every row against live data."),
+    ])
+
+
 # ============================================================================ entry point
 def render_memo(snapshot: Snapshot | Mapping[str, Any], manifest: Manifest | Mapping[str, Any] | None) -> str:
     """Render the Investment Committee memo (Markdown) from a snapshot and its manifest."""
@@ -1240,6 +1285,7 @@ def render_memo(snapshot: Snapshot | Mapping[str, Any], manifest: Manifest | Map
     sections = [
         title,
         _header(snap, man),
+        f"## {SEC['bull']}. The long-term case, made falsifiable", _section_bull(snap),
         f"## {SEC['summary']}. Executive summary", _section_summary(snap),
         f"## {SEC['market']}. What the market is pricing (reverse valuation)", _section_market(snap),
         f"## {SEC['believe']}. What you have to believe (one-at-a-time sensitivity)", _section_believe(snap),
