@@ -104,7 +104,7 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
                   </a>
                 </span>
                 <Sep />
-                <span>Snapshot {snapshot ? fmtUtc(snapshot.generated_at_utc) : "n/a"} UTC</span>
+                <span>Snapshot {snapshot ? fmtUtc(snapshot.generated_at_utc) : "n/a"}</span>
                 <Sep />
                 <Tooltip wide content={fresh.detail}>
                   <span tabIndex={0} className={cn("cursor-help", FRESH_TEXT[fresh.variant])}>
