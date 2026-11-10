@@ -4,6 +4,7 @@ import { Stat } from "@/components/ui/Stat";
 import { MethodNote, SectionIntro, StatGrid } from "@/components/ui/Section";
 import { AgentScaleCalculator } from "@/components/tab3/AgentScaleCalculator";
 import { BreakevenPanel } from "@/components/tab3/BreakevenPanel";
+import { ChainSignaturesPanel } from "@/components/tab3/ChainSignaturesPanel";
 import { InputsPanel } from "@/components/tab3/InputsPanel";
 import { IssuanceCard } from "@/components/tab3/IssuanceCard";
 import { validatePort } from "@/components/tab3/portCheck";
@@ -119,6 +120,12 @@ export function Tab3Supply({ snapshot }: TabProps) {
       </div>
 
       <SinkAudit rpc={rpc} sp={sp} />
+
+      <ChainSignaturesPanel
+        cs={snapshot?.chain_signatures ?? null}
+        dailyIssuanceNear={sp?.current_daily_issuance_near ?? null}
+        networkGasBurnNearPerDay={sinks && finite(sinks.gas_burn) ? sinks.gas_burn : null}
+      />
 
       <AgentScaleCalculator
         storageNearPerKb={rpc?.storage_near_per_kb ?? null}

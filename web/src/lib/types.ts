@@ -1356,6 +1356,8 @@ export interface Snapshot {
   market_implied?: MarketImplied | null;
   sensitivity?: Sensitivity | null;
   relative_value?: RelativeValue | null;
+  /** Collector extra (collectors/chain_signatures.py): v1.signer usage audit; null when it failed, absent in older snapshots. */
+  chain_signatures?: ChainSignatures | null;
   /** Out-of-sample volume-engine backtest (quant/valuo/models/backtest.py); absent from older snapshots. */
   backtest?: VolumeBacktest | null;
   // bull_case.py: the long-term case as falsifiable conditions graded against live data.
@@ -1465,6 +1467,103 @@ export type VolumeBacktest = {
   by_period?: { split_origin_date: string; rule: string; early: Record<string, BacktestHorizonStats>; late: Record<string, BacktestHorizonStats> };
   calibrated: { per_horizon: Record<string, boolean | null>; all: boolean; rule: string };
   headline: string;
+};
+
+// --------------------------------------------------------------------------- chain signatures (v1.signer)
+/** One NearBlocks page of the newest receipts before `before_block` (`chain_signatures.windows[]`). */
+export type ChainSignaturesWindow = {
+  /** "level": newest receipts before a block height in the last 7 days; "midnight": before 00:00 UTC of `before_date` */
+  kind?: "level" | "midnight" | string;
+  offset_h?: number;
+  before_block?: number;
+  before_date?: string;
+  days_before_head?: number;
+  n_receipts: number;
+  n_sign: number;
+  n_sign_success?: number;
+  n_respond?: number;
+  newest_time_utc?: string | null;
+  oldest_time_utc?: string | null;
+  span_s: number;
+  sign_share?: number | null;
+  receipts_per_day?: number | null;
+  sign_per_day?: number | null;
+  gas_burnt_near?: number | null;
+  gas_near_per_day?: number | null;
+  method_mix?: Record<string, number>;
+  [key: string]: unknown;
+};
+
+export type ChainSignaturesTrend = {
+  n: number;
+  slope_ln_per_day: number;
+  slope_se?: number | null;
+  t_stat?: number | null;
+  growth_30d: number;
+  growth_30d_ci90?: [number, number] | null;
+};
+
+/** `snapshot.chain_signatures`: every field optional, null when not measured (see `not_measured`). */
+export type ChainSignatures = {
+  contract?: string;
+  status?: "measured" | "count_only" | "unavailable" | string;
+  method?: string;
+  cumulative_receipts?: number | null;
+  cumulative_receipts_note?: string | null;
+  head_block?: number | null;
+  head_time_utc?: string | null;
+  seconds_per_block?: number | null;
+  burnt_gas_reward?: number | null;
+  windows?: ChainSignaturesWindow[];
+  not_measured?: string[];
+  windows_ok?: number;
+  receipts_sampled?: number;
+  sign_receipts_sampled?: number;
+  sign_success_share?: number | null;
+  sampled_seconds?: number | null;
+  sign_per_day_7d?: number | null;
+  sign_per_day_7d_se?: number | null;
+  windows_7d?: number;
+  sign_per_day_7_30d?: number | null;
+  sign_per_day_7_30d_se?: number | null;
+  windows_7_30d?: number;
+  sign_per_day_30d?: number | null;
+  sign_per_day_30d_se?: number | null;
+  windows_30d?: number;
+  trend_windows?: number;
+  trend?: ChainSignaturesTrend | null;
+  growth_status?: "growing" | "declining" | "inconclusive" | "not_measured" | string;
+  callers?: {
+    n_sign_sampled: number;
+    n_callers: number;
+    hhi: number | null;
+    /** share of sampled sign receipts from accounts under bridge.near (name-based classification) */
+    bridge_share?: number | null;
+    top: Array<{ account_id: string; sign_receipts: number; share: number }>;
+  } | null;
+  deposit_yocto_median?: number | null;
+  deposit_yocto_max?: number | null;
+  deposit_near_mean?: number | null;
+  gas_near_per_sign?: number | null;
+  gas_near_per_day_30d?: number | null;
+  gas_burnt_net_near_per_day_30d?: number | null;
+  gas_to_contract_near_per_day_30d?: number | null;
+  fee_note?: string | null;
+  near_price_usd?: number | null;
+  storage?: {
+    storage_bytes?: number | null;
+    storage_locked_near?: number | null;
+    growth_locked_near_per_day?: number | null;
+    state_block_height?: number | null;
+    source?: string;
+  } | null;
+  deposit_near_per_day_30d?: number | null;
+  deposit_usd_per_day_30d?: number | null;
+  gas_usd_per_sign?: number | null;
+  gas_usd_per_day_30d?: number | null;
+  storage_locked_usd?: number | null;
+  elapsed_s?: number;
+  [key: string]: unknown;
 };
 
 // --------------------------------------------------------------------------- market-implied solves

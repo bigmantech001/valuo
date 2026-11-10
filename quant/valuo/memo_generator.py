@@ -591,7 +591,47 @@ def _section_supply(snap: Snapshot) -> str:
         f"### {SEC['supply']}.7 Agent-scale state lock (locked = agents x KB x {fmt_num(t.storage_near_per_kb, 2)} NEAR/KB; default {fmt_num(kb_default, 0)} KB per vault is an assumption)",
         _table(["Agents", "KB/agent", "Locked", "Days of issuance absorbed", "Share of supply"], agent_rows, ["r", "r", "r", "r", "r"]),
     ]
+    cs_par = _chain_signatures_paragraph(snap)
+    if cs_par:
+        parts += ["", f"### {SEC['supply']}.8 Chain Signatures (v1.signer): a second usage engine?", cs_par]
     return "\n".join(parts)
+
+
+def _chain_signatures_paragraph(snap: Snapshot) -> str | None:
+    """A few sentences on the v1.signer audit (snapshot.chain_signatures, an extra field). None when absent."""
+    cs = getattr(snap, "chain_signatures", None)
+    if not isinstance(cs, Mapping):
+        return None
+    if cs.get("status") != "measured" or _finite(cs.get("sign_per_day_30d")) is None:
+        cum = cs.get("cumulative_receipts")
+        return ("Sign-request rate not measured this run (" + ("; ".join(cs.get("not_measured") or []) or "NearBlocks unavailable") + ")."
+                + (f" NearBlocks counts {fmt_int(cum)} cumulative receipts at v1.signer." if cum else ""))
+    trend = cs.get("trend") or {}
+    callers = (cs.get("callers") or {}).get("top") or []
+    top = ", ".join(f"{c['account_id']} {fmt_pct(c['share'], 0)}" for c in callers[:3])
+    storage = cs.get("storage") or {}
+    reward = _finite(cs.get("burnt_gas_reward"))
+    gas_day, issuance_day = _finite(cs.get("gas_near_per_day_30d")), _finite(snap.supply_physics.current_daily_issuance_near)
+    burnt_day = gas_day * (1 - (reward or 0.0)) if gas_day is not None else None
+    sink_share = burnt_day / issuance_day if burnt_day is not None and issuance_day else None
+    net_burn = _finite((snap.supply_physics.current_daily_sinks_near or {}).get("gas_burn"))
+    burn_share = burnt_day / net_burn if burnt_day is not None and net_burn else None
+    growth = (f"Over the {fmt_int(trend.get('n'))} windows taken at 00:00 UTC (same time of day), the ln-rate trend is "
+              f"{fmt_pct(trend.get('growth_30d'), 0, signed=True)} per 30 days (t = {fmt_num(trend.get('t_stat'), 2)}; {cs.get('growth_status')})"
+              if trend else "No trend was fitted (too few 00:00 UTC windows)")
+    return (
+        f"Sampled from {fmt_int(cs.get('windows_ok'))} NearBlocks windows ({fmt_int(cs.get('receipts_sampled'))} receipts, "
+        f"{fmt_int(cs.get('sign_receipts_sampled'))} sign requests) over the trailing 30 days, v1.signer handled "
+        f"{fmt_int(cs.get('sign_per_day_7d'))} sign requests/day over 7 days (SE {fmt_int(cs.get('sign_per_day_7d_se'))}) and "
+        f"{fmt_int(cs.get('sign_per_day_30d'))}/day over 30 days (SE {fmt_int(cs.get('sign_per_day_30d_se'))}). {growth}. "
+        f"Callers are concentrated: {top or NA} of sampled requests; accounts under bridge.near send "
+        f"{fmt_pct((cs.get('callers') or {}).get('bridge_share'), 0)}, so much of this usage is bridging that overlaps Intents' cross-chain flow. A request attaches {fmt_int(cs.get('deposit_yocto_median'))} yoctoNEAR, "
+        f"so the signer earns no fee; requesters pay gas, {fmt_num(cs.get('gas_near_per_sign'), 4)} NEAR per request across sign, respond and "
+        f"callback receipts, {fmt_near(cs.get('gas_near_per_day_30d'), 1)}/day ({fmt_usd(cs.get('gas_usd_per_day_30d'))}/day), "
+        f"{fmt_pct(1 - reward if reward is not None else None, 0)} of it burnt (live burnt_gas_reward {fmt_pct(reward, 0)} to the contract), "
+        f"{fmt_pct(burn_share, 1)} of the network gas burn and {fmt_pct(sink_share, 2)} of measured daily issuance (part of the L1 gas burn sink above, not an addition to it). The contract's storage lock is {fmt_near(storage.get('storage_locked_near'), 1)}. "
+        f"NearBlocks counts {fmt_int(cs.get('cumulative_receipts'))} cumulative v1.signer receipts; the rates are sample estimates, not exact counts."
+    )
 
 
 def _section_sotp(snap: Snapshot) -> str:

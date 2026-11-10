@@ -37,6 +37,8 @@ from typing import Any
 import httpx
 
 from valuo import __version__, assumptions, config
+from valuo.collectors.chain_signatures import attach_context as attach_chain_signatures_context
+from valuo.collectors.chain_signatures import PER_PAGE as PER_PAGE_CS, collect_chain_signatures
 from valuo.collectors.comps import collect_comps_async, multiple
 from valuo.collectors.execution_bench import collect_execution_bench
 from valuo.collectors.intents_forensics import (
@@ -81,7 +83,7 @@ __all__ = [
     "EXIT_OK", "EXIT_NEAR_RPC", "EXIT_FORENSICS", "EXIT_MODEL", "EXIT_UNEXPECTED",
     "DEFAULT_CLIPS", "parse_args", "is_default_run", "resolve_out_dir", "run_pipeline", "build_evidence_scorecard",
     "backfill_near_fdv", "attach_derived_models", "sanitize_json", "write_snapshot", "write_duckdb", "prune_raw_dir", "update_readme_findings",
-    "competitive_ceiling_note", "console_summary", "main",
+    "competitive_ceiling_note", "console_summary", "main", "chain_signatures_claim", "CHAIN_SIGNATURES_CLAIM",
 ]
 
 EXIT_OK, EXIT_UNEXPECTED, EXIT_NEAR_RPC, EXIT_FORENSICS, EXIT_MODEL = 0, 1, 2, 3, 4
@@ -166,10 +168,41 @@ class _Log:
 
 
 # ============================================================================ stage 2: concurrent API collectors
-async def _collect_apis(ledger: ProvenanceLedger, args: argparse.Namespace, log: _Log) -> tuple[ExecutionBenchmark | None, Any, PeerComps]:
-    """Run bench (optional), forensics and comps on one event loop and one client; bench failure -> None."""
+async def _collect_apis(
+    ledger: ProvenanceLedger, args: argparse.Namespace, log: _Log,
+) -> tuple[ExecutionBenchmark | None, Any, PeerComps, dict[str, Any] | None]:
+    """Run bench (optional), forensics, comps and the Chain Signatures audit on one event loop and one client.
+
+    Bench failure -> None. The Chain Signatures audit also reads NearBlocks, so it waits for forensics to finish
+    (the two would share NearBlocks' unauthenticated per-minute quota) and then runs while bench/comps continue.
+    """
     timeout = max(config.HTTP_TIMEOUT_S, 25.0)
+    forensics_done = asyncio.Event()
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+        async def forensics_task() -> Any:
+            try:
+                # page_delay_s=None lets the collector read VALUO_NEARBLOCKS_PAGE_DELAY_S; the flag overrides it only when given.
+                return await collect_intents_forensics_async(ledger, client=client, nearblocks_pages=args.nearblocks_pages, page_delay_s=args.nearblocks_delay)
+            finally:
+                forensics_done.set()
+
+        # --- Chain Signatures (v1.signer) usage audit: evidence only, never fatal (failure -> warning + nulls).
+        async def chain_signatures_task() -> dict[str, Any] | None:
+            await forensics_done.wait()
+            t0 = time.perf_counter()
+            cs_warnings: list[str] = []
+            try:
+                cs = await collect_chain_signatures(client, ledger, cs_warnings)
+            except Exception as exc:  # noqa: BLE001 - the collector already swallows; kept for safety
+                cs_warnings.append(f"chain_signatures: failed ({type(exc).__name__}: {exc}); chain_signatures is null")
+                cs = None
+            for w in cs_warnings:
+                ledger.warn(w)
+            if cs is not None:
+                cs["elapsed_s"] = round(time.perf_counter() - t0, 3)
+            log(f"chain_signatures done: status {(cs or {}).get('status')}, {(cs or {}).get('windows_ok', 0)} windows")
+            return cs
+
         async def bench_task() -> ExecutionBenchmark | None:
             if args.skip_bench:
                 ledger.warn("reproduce: execution benchmark skipped (--skip-bench); execution_bench is null")
@@ -181,11 +214,11 @@ async def _collect_apis(ledger: ProvenanceLedger, args: argparse.Namespace, log:
                 log(f"execution_bench failed: {type(exc).__name__}: {exc}")
                 return None
 
-        bench, forensics, comps = await asyncio.gather(
+        bench, forensics, comps, chain_sigs = await asyncio.gather(
             bench_task(),
-            # page_delay_s=None lets the collector read VALUO_NEARBLOCKS_PAGE_DELAY_S; the flag overrides it only when given.
-            collect_intents_forensics_async(ledger, client=client, nearblocks_pages=args.nearblocks_pages, page_delay_s=args.nearblocks_delay),
+            forensics_task(),
             collect_comps_async(ledger, client=client),
+            chain_signatures_task(),
             return_exceptions=True,
         )
     if isinstance(bench, BaseException):  # cannot happen (bench_task swallows), kept for safety
@@ -193,7 +226,10 @@ async def _collect_apis(ledger: ProvenanceLedger, args: argparse.Namespace, log:
         bench = None
     if isinstance(comps, BaseException):
         raise comps
-    return bench, forensics, comps
+    if isinstance(chain_sigs, BaseException):
+        ledger.warn(f"reproduce: chain_signatures failed ({chain_sigs!r}); chain_signatures is null")
+        chain_sigs = None
+    return bench, forensics, comps, chain_sigs
 
 
 # ============================================================================ stage 3: comps backfill
@@ -249,8 +285,12 @@ def build_evidence_scorecard(
     sotp: SotpValuation,
     comps: PeerComps,
     ledger: ProvenanceLedger | None = None,
+    chain_signatures: dict[str, Any] | None = None,
 ) -> list[EvidenceClaim]:
-    """The claims of MODEL_DESIGN 4.4, graded from the numbers actually in the snapshot (never from the thesis)."""
+    """The claims of MODEL_DESIGN 4.4, graded from the numbers actually in the snapshot (never from the thesis).
+
+    ``chain_signatures`` (the v1.signer audit) adds one claim when given; None leaves the card as before.
+    """
     claims: list[EvidenceClaim] = []
     intents = next((s for s in truth.tracked_sinks if s.account_id == "intents.near"), None)
 
@@ -485,7 +525,52 @@ def build_evidence_scorecard(
         f"{_record_ref(ledger, 'defillama', 'fees:near-intents:dailyHoldersRevenue')} / {_record_ref(ledger, 'defillama', 'fees:near-intents')}", "medium",
         f"DefiLlama revenue methodology: {(fees.get('methodology') or {}).get('revenue') or 'n/a'}",
     ))
+    if chain_signatures is not None:
+        claims.append(chain_signatures_claim(chain_signatures))
     return claims
+
+
+# --- Chain Signatures claim (v1.signer audit; collectors/chain_signatures.py).
+CHAIN_SIGNATURES_CLAIM = "Chain Signatures (v1.signer) is a growing second usage engine beyond Intents"
+
+
+def chain_signatures_claim(cs: dict[str, Any]) -> EvidenceClaim:
+    """DERIVED when sampled sign requests show a positive ln-rate trend with t >= 2; NOT_SUPPORTED otherwise.
+
+    The rate is a sample estimate (time-stratified NearBlocks windows), so even a significant trend is DERIVED, not
+    VERIFIED. VERIFIED_LIVE_API is used only for usage that the API counts exactly (cumulative receipts) when the
+    sampled trend could not be measured; that grades the usage level, never the growth.
+    """
+    claim = CHAIN_SIGNATURES_CLAIM
+    rate7, rate30 = cs.get("sign_per_day_7d"), cs.get("sign_per_day_30d")
+    trend = cs.get("trend") or {}
+    callers = (cs.get("callers") or {}).get("top") or []
+    top = callers[0] if callers else None
+    bridge = (cs.get("callers") or {}).get("bridge_share")
+    top_txt = f"; top caller {top['account_id']} {top['share']:.0%} of {cs['callers']['n_sign_sampled']:,} sampled sign receipts" if top else ""
+    top_txt += f", *.bridge.near callers {bridge:.0%}" if isinstance(bridge, (int, float)) else ""
+    gas_txt = f"; gas {cs['gas_near_per_sign']:.4f} NEAR per request" if isinstance(cs.get("gas_near_per_sign"), (int, float)) else ""
+    src = (f"nearblocks/txns:v1.signer:before_block:* ({cs.get('windows_ok', 0)} windows of {PER_PAGE_CS} receipts, "
+           f"{cs.get('receipts_sampled', 0):,} receipts) + nearblocks/txns:v1.signer:count")
+    note = ("sampled estimate: each window covers minutes; bridge callers serve cross-chain transfers that overlap Intents settlement, "
+            "so the engine is not fully independent of Intents; storage lock "
+            f"{fmt_near(((cs.get('storage') or {}).get('storage_locked_near')), 1)} is small. ") + (cs.get("fee_note") or "")
+    if isinstance(rate30, (int, float)) and rate30 > 0 and trend.get("growth_30d") is not None:
+        g, t_stat, status = trend["growth_30d"], trend.get("t_stat"), cs.get("growth_status")
+        ci = trend.get("growth_30d_ci90")
+        ci_txt = f" [90% CI {ci[0]:+.0%} to {ci[1]:+.0%}]" if isinstance(ci, list) and len(ci) == 2 else ""
+        value = (f"{rate7:,.0f} sign requests/day (7d) vs {rate30:,.0f}/day (30d); ln-trend {g:+.0%} per 30 d{ci_txt}, "
+                 f"t = {t_stat:.2f}{top_txt}{gas_txt}" if isinstance(rate7, (int, float)) and isinstance(t_stat, (int, float)) else
+                 f"{rate30:,.0f} sign requests/day (30d); trend {g:+.0%} per 30 d{top_txt}{gas_txt}")
+        if status == "growing":
+            return _claim(claim, "DERIVED", value, src, "medium", note)
+        return _claim(claim, "NOT_SUPPORTED", value + f" ({status}: growth not shown at t >= 2)", src, "low", note)
+    cum = cs.get("cumulative_receipts")
+    if isinstance(cum, int) and cum > 0:
+        return _claim(claim, "VERIFIED_LIVE_API", f"usage only: {cum:,} cumulative v1.signer receipts; growth not measured this run",
+                      "nearblocks/txns:v1.signer:count", "low", "the sampled rate/trend failed this run; the level is counted, the growth claim is not supported")
+    return _claim(claim, "NOT_SUPPORTED", "not measured: NearBlocks v1.signer endpoints unavailable this run", "nearblocks (none)", "none",
+                  "; ".join(cs.get("not_measured") or []))
 
 
 # ============================================================================ writing
@@ -677,6 +762,7 @@ def console_summary(snapshot: Snapshot, manifest: Manifest, paths: dict[str, Pat
         f"price P50 {fmt_usd(s.price_percentiles['p50'], compact=False, decimals=2)}  current FDV {fmt_usd(s.current_fdv_usd)} ({s.upside_p50_pct:+.1f}%)",
         f"  breakeven V*/day {{{breakeven_txt}}}  flow crossover {{{crossover_txt}}}  MC P(cross<={s.horizon_months}m) {{{mc_txt}}}",
         f"  bear combined worst {fmt_usd(snapshot.bear_case.combined_worst_fdv)} ({fmt_pct(snapshot.bear_case.combined_drawdown_pct, 0, signed=True)}); triggers breached {snapshot.bear_case.triggers_breached}/{snapshot.bear_case.triggers_evaluated} graded",
+        _chain_signatures_console_line(getattr(snapshot, "chain_signatures", None)),
         f"  records {len(manifest.records)} ({manifest.failures} non-2xx)  warnings {len(snapshot.warnings)}",
         f"  artifacts -> {paths['dir']} ({'CANONICAL full default run' if (snapshot.run_config or {}).get('canonical') else 'DEV run: non-default flags; canonical artifacts/ untouched'})",
         f"  wrote {paths['snapshot']} (sha256 {manifest.snapshot_sha256[:16]}...), {paths['manifest']}, {paths['memo']}" + (f", {paths['duckdb']}" if "duckdb" in paths else ""),
@@ -688,6 +774,15 @@ def console_summary(snapshot: Snapshot, manifest: Manifest, paths: dict[str, Pat
         lines.append(f"  pruned {pruned} stale file(s) from {paths['raw']}")
     lines.append("=" * 96)
     return "\n".join(lines)
+
+
+def _chain_signatures_console_line(cs: Any) -> str:
+    if not isinstance(cs, dict) or cs.get("status") != "measured":
+        return f"  chain signatures (v1.signer): {(cs or {}).get('status', 'null') if isinstance(cs, dict) else 'null'}"
+    trend = cs.get("trend") or {}
+    g = trend.get("growth_30d")
+    return (f"  chain signatures (v1.signer): {cs.get('sign_per_day_7d') or float('nan'):,.0f} sign/day 7d, {cs.get('sign_per_day_30d') or float('nan'):,.0f} 30d; "
+            f"trend {f'{g:+.0%}' if isinstance(g, (int, float)) else 'n/a'}/30d ({cs.get('growth_status')}); {cs.get('windows_ok')} windows")
 
 
 # ============================================================================ derived views over the snapshot
@@ -787,12 +882,17 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
 
     log(f"api collectors: execution_bench({'skip' if args.skip_bench else 'live'}) || intents_forensics({args.nearblocks_pages} pages) || comps")
     t0 = time.perf_counter()
-    bench, forensics, comps = asyncio.run(_collect_apis(ledger, args, log))
+    bench, forensics, comps, chain_sigs = asyncio.run(_collect_apis(ledger, args, log))
     timings["api_collectors"] = round(time.perf_counter() - t0, 3)
     if isinstance(forensics, BaseException):
         raise forensics
     log(f"api collectors done: bench={'ok' if bench is not None else 'null'}, forensics {forensics.receipts_sampled} receipts, comps median FDV/rev {comps.median_fdv_to_revenue_ex_near}")
     comps = backfill_near_fdv(comps, forensics, ledger)
+    # Chain Signatures: reuse near_rpc's v1.signer storage row and price NEAR quantities at the snapshot price.
+    chain_sigs = attach_chain_signatures_context(
+        chain_sigs, storage_sink=next((s for s in truth.tracked_sinks if s.account_id == "v1.signer"), None),
+        near_price_usd=forensics.price.get("current_usd"),
+    )
 
     log("models: supply_physics -> sotp -> bear_case")
     t0 = time.perf_counter()
@@ -809,7 +909,7 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
     base_inputs, _cal, _labeled = build_inputs(truth, forensics, comps, supply, registry, bench=bench, horizon_months=args.horizon)
     bear = run_bear_case(base_inputs, deterministic_sotp(base_inputs), live_metrics(forensics, truth, bench))
     timings["bear_case"] = round(time.perf_counter() - t0, 3)
-    scorecard = build_evidence_scorecard(truth, bench, forensics, supply, sotp, comps, ledger)
+    scorecard = build_evidence_scorecard(truth, bench, forensics, supply, sotp, comps, ledger, chain_signatures=chain_sigs)
 
     warnings = _merge_warnings(ledger.warnings, supply.warnings, [f"sotp: {w}" if not w.startswith("sotp") else w for w in (sotp.calibration or {}).get("warnings", [])])
     nan_hits: list[str] = []
@@ -818,6 +918,7 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
         generated_at_utc=started_utc, seed=args.seed, runtime_s=round(runtime, 3), valuo_version=__version__,
         near_rpc=truth, execution_bench=bench, intents_forensics=forensics, comps=comps, supply_physics=supply, sotp=sotp, bear_case=bear,
         evidence_scorecard=scorecard, assumptions=assumptions.as_list(registry), warnings=warnings, provenance_summary=ledger.summary(),
+        chain_signatures=chain_sigs,  # extra field (OpenModel extra="allow"); null when the audit failed
         run_config={
             "argv": list(getattr(args, "argv_used", [])), "skip_bench": args.skip_bench, "paths": args.paths, "seed": args.seed,
             "no_archival": args.no_archival, "clips_usd": args.clip_values, "nearblocks_pages": args.nearblocks_pages,

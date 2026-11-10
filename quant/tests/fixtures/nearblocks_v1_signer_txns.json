@@ -1,0 +1,1067 @@
+{
+ "cursor": "24933019723",
+ "txns": [
+  {
+   "id": "24933020944",
+   "receipt_id": "iofPYtcpwMGRcKYdVnHv9gKekYNSG9x9qC4QbRhZMvC",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "DiBkMiXjSTLT8mfbvPqT1KK66JysjPTwhnN77eXvgaN7",
+    "block_height": 223915277,
+    "block_timestamp": 1794313273548608300
+   },
+   "receipt_outcome": null,
+   "transaction_hash": "2DJ7B4hKsb3hrXoXcDvWJqfQ3sh5gDwsTrBCTbFNsL6s",
+   "included_in_block_hash": "4mva2xG1812fUwUEc3vRQ1BVEh8foiCJLEK1RXfX8GsD",
+   "block_timestamp": "1794313272469987237",
+   "block": {
+    "block_height": 223915275
+   },
+   "receipt_conversion_tokens_burnt": "31630878269500000000",
+   "actions": null,
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 796630436132800000000
+   }
+  },
+  {
+   "id": "24933020933",
+   "receipt_id": "4SdTG5TFyTjKt4uwXc71e5jG5WzQvXVyhWcmaoULSFVx",
+   "predecessor_account_id": "omni.bridge.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "DiBkMiXjSTLT8mfbvPqT1KK66JysjPTwhnN77eXvgaN7",
+    "block_height": 223915277,
+    "block_timestamp": 1794313273548608300
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4197259640304,
+    "tokens_burnt": 419725964030400000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "2DJ7B4hKsb3hrXoXcDvWJqfQ3sh5gDwsTrBCTbFNsL6s",
+   "included_in_block_hash": "4mva2xG1812fUwUEc3vRQ1BVEh8foiCJLEK1RXfX8GsD",
+   "block_timestamp": "1794313272469987237",
+   "block": {
+    "block_height": 223915275
+   },
+   "receipt_conversion_tokens_burnt": "31630878269500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 419725964030400000000,
+     "args": "{\"request\": {\"path\": \"bridge-1\", \"payload\": [169, 230, 242, 250, 107, 15, 160, 129, 114, 53, 137, 19...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 796630436132800000000
+   }
+  },
+  {
+   "id": "24933020764",
+   "receipt_id": "8DN1kmj7NDyWiS7h2xqM4LYh9BjtoHFoWRNXpXATetAK",
+   "predecessor_account_id": "hashkeympc.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "AHif2ws379m7cyPeqfPuUiGwtktd63C1EAmRWhmS2iNk",
+    "block_height": 223915272,
+    "block_timestamp": 1794313270796754000
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7926941994422,
+    "tokens_burnt": 792694199442200000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "NqFJT4VhTj2ELo3x9zVC9R6fkcWhHMmY6KpP4NFj2DL",
+   "included_in_block_hash": "GWavpH3cUuVoe6f9k637tPMSBjnB2fGgzXPCbUJt2CgM",
+   "block_timestamp": "1794313270285597816",
+   "block": {
+    "block_height": 223915271
+   },
+   "receipt_conversion_tokens_burnt": "33290271551500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 792694199442200000000,
+     "args": "{\"request\": {\"tweak\": [182, 232, 179, 254, 103, 201, 40, 218, 136, 53, 200, 37, 87, 221, 101, 109, 1...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 825984470993700000000
+   }
+  },
+  {
+   "id": "24933020598",
+   "receipt_id": "6maTwkxGfpgKRySkBqXqDsNAmZzv13CS7JpcqXfcbdkc",
+   "predecessor_account_id": "near-mpc-staking4all-01.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "XmV8GXGrwmHApNy91HzdJvFVirEnLWfbaCKjsgDTSBR",
+    "block_height": 223915267,
+    "block_timestamp": 1794313268081162500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7882921686828,
+    "tokens_burnt": 788292168682800000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "3YzNLjQxKvAhYSQJgaGNM7TBokYGcCfaM6on7nTVHuLZ",
+   "included_in_block_hash": "DQP4cfLCtvqmgHgW11WC2bm2NF4BgLYU56CYv9u5A2e4",
+   "block_timestamp": "1794313267601597294",
+   "block": {
+    "block_height": 223915266
+   },
+   "receipt_conversion_tokens_burnt": "33290271551500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 788292168682800000000,
+     "args": "{\"request\": {\"tweak\": [65, 237, 124, 212, 128, 22, 2, 123, 207, 72, 240, 17, 64, 60, 143, 46, 219, 2...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 821582440234300000000
+   }
+  },
+  {
+   "id": "24933020597",
+   "receipt_id": "9ERT8gb79JUN1UsYNZArvXtGeVuu2J1dToN1B1akHa9m",
+   "predecessor_account_id": "nodemonster.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "XmV8GXGrwmHApNy91HzdJvFVirEnLWfbaCKjsgDTSBR",
+    "block_height": 223915267,
+    "block_timestamp": 1794313268081162500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7880093631030,
+    "tokens_burnt": 788009363103000000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "7xZCdxjNmw1crn1N4Egh7ikwwinhDHfpaPyX3Z1m2asQ",
+   "included_in_block_hash": "DQP4cfLCtvqmgHgW11WC2bm2NF4BgLYU56CYv9u5A2e4",
+   "block_timestamp": "1794313267601597294",
+   "block": {
+    "block_height": 223915266
+   },
+   "receipt_conversion_tokens_burnt": "33290271551500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 788009363103000000000,
+     "args": "{\"request\": {\"tweak\": [249, 178, 183, 128, 200, 199, 0, 229, 121, 231, 210, 249, 38, 146, 122, 130, ...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 821299634654500000000
+   }
+  },
+  {
+   "id": "24933020614",
+   "receipt_id": "37ysVmjAD3wgdecDzga26L8oxVwSpiBAgkUqcjCcveQ9",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "XmV8GXGrwmHApNy91HzdJvFVirEnLWfbaCKjsgDTSBR",
+    "block_height": 223915267,
+    "block_timestamp": 1794313268081162500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3419501262695,
+    "tokens_burnt": 341950126269500000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "Cd2xAVNFb51DqXaUvAGH4zSTNVYbBLX5Vru8J5PTddxh",
+   "included_in_block_hash": "DtDezYsRwJWyKS4yTsbz3fnFmq1JgSMq9SXMGJmHY3V5",
+   "block_timestamp": "1794313264985158549",
+   "block": {
+    "block_height": 223915261
+   },
+   "receipt_conversion_tokens_burnt": "41959170938500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 341950126269500000000,
+     "args": "[{\"tweak\": [182, 232, 179, 254, 103, 201, 40, 218, 136, 53, 200, 37, 87, 221, 101, 109, 100, 217, 2,...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 3.5749080652411e+21
+   }
+  },
+  {
+   "id": "24933020585",
+   "receipt_id": "BTMUMshGvDMjCU1kodNTkGw5Kw7izrtQvhVDxgHmhg88",
+   "predecessor_account_id": "fast-auth.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "XmV8GXGrwmHApNy91HzdJvFVirEnLWfbaCKjsgDTSBR",
+    "block_height": 223915267,
+    "block_timestamp": 1794313268081162500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4208978924916,
+    "tokens_burnt": 420897892491600000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "Cd2xAVNFb51DqXaUvAGH4zSTNVYbBLX5Vru8J5PTddxh",
+   "included_in_block_hash": "DtDezYsRwJWyKS4yTsbz3fnFmq1JgSMq9SXMGJmHY3V5",
+   "block_timestamp": "1794313264985158549",
+   "block": {
+    "block_height": 223915261
+   },
+   "receipt_conversion_tokens_burnt": "41959170938500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 420897892491600000000,
+     "args": "{\"request\": {\"path\": \"jwt#https://fastauth.swe.at#z1bHj96JsaX887vbAtOSsqT4MSj1\", \"domain_id\": 1, \"pa...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 3.5749080652411e+21
+   }
+  },
+  {
+   "id": "24933020502",
+   "receipt_id": "4fhtVLWh5BRnXt5dvzV1KciLaKvTxDU9Lny24iPmpicQ",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "A52Q8uPRh8o1MvfJfB3MmjdJp2QmMs3e8FXDS5tMme8N",
+    "block_height": 223915262,
+    "block_timestamp": 1794313265451680500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3376498118067,
+    "tokens_burnt": 337649811806700000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "9hxE5kTtTcuA5UDmfFfL5oz38muk88UzjPkAJuefSWJA",
+   "included_in_block_hash": "8tonzSwQ7wfYFoEmCQsmbc4SzC3e1c8rd8Ez97Yo8tHm",
+   "block_timestamp": "1794313264466358800",
+   "block": {
+    "block_height": 223915260
+   },
+   "receipt_conversion_tokens_burnt": "33323650152000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 337649811806700000000,
+     "args": "[{\"tweak\": [65, 237, 124, 212, 128, 22, 2, 123, 207, 72, 240, 17, 64, 60, 143, 46, 219, 243, 228, 18...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.5641529370825e+21
+   }
+  },
+  {
+   "id": "24933020495",
+   "receipt_id": "2d5e3Fn2PCSnhT66yAQae3PsLnLffbo5JY5koABxwfMn",
+   "predecessor_account_id": "kernel-zec.meteor-vaults.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "A52Q8uPRh8o1MvfJfB3MmjdJp2QmMs3e8FXDS5tMme8N",
+    "block_height": 223915262,
+    "block_timestamp": 1794313265451680500
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4191143483050,
+    "tokens_burnt": 419114348305000000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "9hxE5kTtTcuA5UDmfFfL5oz38muk88UzjPkAJuefSWJA",
+   "included_in_block_hash": "8tonzSwQ7wfYFoEmCQsmbc4SzC3e1c8rd8Ez97Yo8tHm",
+   "block_timestamp": "1794313264466358800",
+   "block": {
+    "block_height": 223915260
+   },
+   "receipt_conversion_tokens_burnt": "33323650152000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 419114348305000000000,
+     "args": "{\"request\": {\"path\": \"near-1\", \"domain_id\": 1, \"payload_v2\": {\"Eddsa\": \"5a7477235f32abd1688c459fdf30...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.5641529370825e+21
+   }
+  },
+  {
+   "id": "24933020486",
+   "receipt_id": "9sBPLDzUCG2DiKDP5xfMhHGjBBmV4hPAvupc48cpb6ri",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "DtDezYsRwJWyKS4yTsbz3fnFmq1JgSMq9SXMGJmHY3V5",
+    "block_height": 223915261,
+    "block_timestamp": 1794313264985158700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3419140437033,
+    "tokens_burnt": 341914043703300000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "F847x7mPHULzJVmnPR94mGQPTEhHkbErrCZkR4hRuNzj",
+   "included_in_block_hash": "DSr1j28k5mPJJLimMp6mixPWufP15mwwBH3X5NUgNWkA",
+   "block_timestamp": "1794313263837577479",
+   "block": {
+    "block_height": 223915259
+   },
+   "receipt_conversion_tokens_burnt": "33481006411500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 341914043703300000000,
+     "args": "[{\"tweak\": [249, 178, 183, 128, 200, 199, 0, 229, 121, 231, 210, 249, 38, 146, 122, 130, 249, 19, 22...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.5711829429308e+21
+   }
+  },
+  {
+   "id": "24933020477",
+   "receipt_id": "Fx5vz8uWHLDwVn95B5A3J5GVLVnr5B2PPxp35BeF2Z9J",
+   "predecessor_account_id": "kernel-usdc.meteor-vaults.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "DtDezYsRwJWyKS4yTsbz3fnFmq1JgSMq9SXMGJmHY3V5",
+    "block_height": 223915261,
+    "block_timestamp": 1794313264985158700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4193952696193,
+    "tokens_burnt": 419395269619300000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "F847x7mPHULzJVmnPR94mGQPTEhHkbErrCZkR4hRuNzj",
+   "included_in_block_hash": "DSr1j28k5mPJJLimMp6mixPWufP15mwwBH3X5NUgNWkA",
+   "block_timestamp": "1794313263837577479",
+   "block": {
+    "block_height": 223915259
+   },
+   "receipt_conversion_tokens_burnt": "33481006411500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 419395269619300000000,
+     "args": "{\"request\": {\"path\": \"near-1\", \"domain_id\": 1, \"payload_v2\": {\"Eddsa\": \"59c1caad1021a329df5ef39b9329...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.5711829429308e+21
+   }
+  },
+  {
+   "id": "24933020360",
+   "receipt_id": "73ewJz2BEzNzzB7mMvnH2AycuzZALdnthtP2CVziMyFg",
+   "predecessor_account_id": "n1-multichain.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "3wZvx13trsEtkQ135z2FMiPeeaP4oghxvsLom6Kcc4nS",
+    "block_height": 223915253,
+    "block_timestamp": 1794313260618999300
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7994748342773,
+    "tokens_burnt": 799474834277300000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "BcnXQQuGKTuDEW2iKBTVPwDHQQXGByCsHENMZsqWWWbp",
+   "included_in_block_hash": "EdDZiaQJH5n6wTdDkpVccTcyf2JD7o9Yrpntn4y7wapF",
+   "block_timestamp": "1794313260010476391",
+   "block": {
+    "block_height": 223915252
+   },
+   "receipt_conversion_tokens_burnt": "33066158091000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 799474834277300000000,
+     "args": "{\"request\": {\"tweak\": [91, 133, 61, 97, 3, 249, 82, 250, 113, 33, 215, 124, 147, 66, 208, 253, 114, ...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 832540992368300000000
+   }
+  },
+  {
+   "id": "24933020323",
+   "receipt_id": "9k1xG2srgNaTcWnmunvzRETsJwrkzow1EQ7SabGbFYAU",
+   "predecessor_account_id": "bitwise-mpc01.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "EdDZiaQJH5n6wTdDkpVccTcyf2JD7o9Yrpntn4y7wapF",
+    "block_height": 223915252,
+    "block_timestamp": 1794313260010476300
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7917501360740,
+    "tokens_burnt": 791750136074000000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "56ebbnPebK2iYXbVNRKDsgbBKgDkh9ZxEZU4CLf5HJFU",
+   "included_in_block_hash": "5V7izkB346owTNLpsj6v5f5HZQZ34qZMaDwVza7VWseq",
+   "block_timestamp": "1794313259406459566",
+   "block": {
+    "block_height": 223915251
+   },
+   "receipt_conversion_tokens_burnt": "33242587836500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 791750136074000000000,
+     "args": "{\"request\": {\"tweak\": [133, 208, 67, 18, 117, 99, 132, 223, 44, 50, 27, 176, 28, 179, 110, 238, 38, ...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 824992723910500000000
+   }
+  },
+  {
+   "id": "24933020252",
+   "receipt_id": "HEY7wS5Q7DfUd9Zcqp5syDHubSw1x1rExJc6h8qxCxjd",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "jZ37iFGCJxpKi1nM8kcSQGoxJmoyjhj92sbEJTXkTxP",
+    "block_height": 223915247,
+    "block_timestamp": 1794313257311433700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3386394753556,
+    "tokens_burnt": 338639475355600000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "2RsoPuLHugzNE3Kmm29vdtjdMFf6y76t4uVdPNa8qDfJ",
+   "included_in_block_hash": "4MJ8UBoN4ksgDie4J5kQY41E3FksoBy8VeVNcxcLXdQD",
+   "block_timestamp": "1794313256161291864",
+   "block": {
+    "block_height": 223915245
+   },
+   "receipt_conversion_tokens_burnt": "31635646641000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 338639475355600000000,
+     "args": "[{\"tweak\": [91, 133, 61, 97, 3, 249, 82, 250, 113, 33, 215, 124, 147, 66, 208, 253, 114, 214, 210, 1...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.3661740152076e+21
+   }
+  },
+  {
+   "id": "24933020244",
+   "receipt_id": "39HVfEsr2tfpeZwcgjeRyZ96dkAJFAsiigDuX4cikTA1",
+   "predecessor_account_id": "omni.bridge.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "jZ37iFGCJxpKi1nM8kcSQGoxJmoyjhj92sbEJTXkTxP",
+    "block_height": 223915247,
+    "block_timestamp": 1794313257311433700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4195397722057,
+    "tokens_burnt": 419539772205700000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "2RsoPuLHugzNE3Kmm29vdtjdMFf6y76t4uVdPNa8qDfJ",
+   "included_in_block_hash": "4MJ8UBoN4ksgDie4J5kQY41E3FksoBy8VeVNcxcLXdQD",
+   "block_timestamp": "1794313256161291864",
+   "block": {
+    "block_height": 223915245
+   },
+   "receipt_conversion_tokens_burnt": "31635646641000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 419539772205700000000,
+     "args": "{\"request\": {\"path\": \"bridge-1\", \"payload\": [123, 162, 202, 129, 86, 162, 142, 26, 65, 0, 68, 111, 2...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 1.3661740152076e+21
+   }
+  },
+  {
+   "id": "24933020230",
+   "receipt_id": "DZUNeBwGK9H39EFUVsSprhVMzcznwjUAcic6SqW9g6TQ",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "g1TH9CAvngAMWVGue29vfgiT2Uj8JUe5yVAZB1kYqS1",
+    "block_height": 223915246,
+    "block_timestamp": 1794313256770439000
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3375433987794,
+    "tokens_burnt": 337543398779400000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "67sKiMBet48KbRxYnEPZRoo2VnTfxSdtraLSG8DixEQZ",
+   "included_in_block_hash": "2uvM5gYuVjtBfb4NNDZVKf9NH7xQWGGFtr3d6GPRs32D",
+   "block_timestamp": "1794313253385441821",
+   "block": {
+    "block_height": 223915240
+   },
+   "receipt_conversion_tokens_burnt": "42192821142000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 337543398779400000000,
+     "args": "[{\"tweak\": [133, 208, 67, 18, 117, 99, 132, 223, 44, 50, 27, 176, 28, 179, 110, 238, 38, 84, 78, 108...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 4.8024936284873e+21
+   }
+  },
+  {
+   "id": "24933020214",
+   "receipt_id": "96WHQBSHbQtM9fzXh643MVnLRTtJxbnoFpUEp9cpye7a",
+   "predecessor_account_id": "fast-auth.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "g1TH9CAvngAMWVGue29vfgiT2Uj8JUe5yVAZB1kYqS1",
+    "block_height": 223915246,
+    "block_timestamp": 1794313256770439000
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4200956158515,
+    "tokens_burnt": 420095615851500000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "67sKiMBet48KbRxYnEPZRoo2VnTfxSdtraLSG8DixEQZ",
+   "included_in_block_hash": "2uvM5gYuVjtBfb4NNDZVKf9NH7xQWGGFtr3d6GPRs32D",
+   "block_timestamp": "1794313253385441821",
+   "block": {
+    "block_height": 223915240
+   },
+   "receipt_conversion_tokens_burnt": "42192821142000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 420095615851500000000,
+     "args": "{\"request\": {\"path\": \"jwt#https://fastauth.swe.at#u2TDosfxzpMBqMIaU86pK4rsjq92\", \"domain_id\": 1, \"pa...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 4.8024936284873e+21
+   }
+  },
+  {
+   "id": "24933019904",
+   "receipt_id": "5nmH1xaojBBctwwxnoAdQbVrEtLSd8biaNJUe5wCtQR4",
+   "predecessor_account_id": "svrn-01.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "ENg2znos8bvkcS1qPtNY4ms3PGYC6a8bet6YHR5aeDCh",
+    "block_height": 223915234,
+    "block_timestamp": 1794313250308090600
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7992843975845,
+    "tokens_burnt": 799284397584500000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "Ecz9ZM6xCA3sy2E8GuFQV3o9pA4UHULtUaB6f8vCcMLP",
+   "included_in_block_hash": "26Ejrfxg5Jk1JwV3UcaakcuxpUYbphanVKhthrnMLpbz",
+   "block_timestamp": "1794313249733990798",
+   "block": {
+    "block_height": 223915233
+   },
+   "receipt_conversion_tokens_burnt": "33080463205500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 799284397584500000000,
+     "args": "{\"request\": {\"tweak\": [250, 234, 210, 99, 131, 139, 11, 68, 252, 177, 12, 206, 118, 225, 137, 61, 24...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 832364860790000000000
+   }
+  },
+  {
+   "id": "24933019848",
+   "receipt_id": "13TAotPuYAbRupLJxNzCCji86YCdeVqHiJipgAUTGfdr",
+   "predecessor_account_id": "nodemonster.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "FbyRyxZBY5uSuLJ29NA8J4uQq4CDb6WVvZStjs9hXW5o",
+    "block_height": 223915232,
+    "block_timestamp": 1794313249260242400
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7999512086118,
+    "tokens_burnt": 799951208611800000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "PH2rxU955zXrKTNy1U85RviG8prdwJJVRMyFhfCgtTR",
+   "included_in_block_hash": "88trznpZy739qGNJHDePCCwTvzWf7oH17UAdqVsMpeMf",
+   "block_timestamp": "1794313248679485656",
+   "block": {
+    "block_height": 223915231
+   },
+   "receipt_conversion_tokens_burnt": "33047084605000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 799951208611800000000,
+     "args": "{\"request\": {\"tweak\": [46, 20, 49, 248, 68, 58, 202, 37, 63, 39, 52, 199, 227, 119, 255, 171, 180, 1...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 832998293216800000000
+   }
+  },
+  {
+   "id": "24933019775",
+   "receipt_id": "HkzokncspYXTxWATDdpRMXKq6RkonUBUefGJgBdVMtzj",
+   "predecessor_account_id": "zcash-connector.bridge.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "AL49HB8mrUudUnsfkqVoJ7NCLp2knG5A2n8g3jsBUu5y",
+    "block_height": 223915228,
+    "block_timestamp": 1794313247206045700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4235413863374,
+    "tokens_burnt": 423541386337400000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "FqKqzacLcyGQQwt7hmBdBM5KFAec1t4M3pTSB8fPauJL",
+   "included_in_block_hash": "47QicyZUyW7ZZ6BDhyRdW1HDh23yiMWM1k6LKJxXb2iH",
+   "block_timestamp": "1794313245993956682",
+   "block": {
+    "block_height": 223915226
+   },
+   "receipt_conversion_tokens_burnt": "31478290381500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 423541386337400000000,
+     "args": "{\"request\": {\"path\": \"a88707b1853b7e09e77b6a4566a2e72767140c7084fe02f1c078169b7436ed46\", \"payload\": ...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 2.800091236056e+21
+   }
+  },
+  {
+   "id": "24933019773",
+   "receipt_id": "HCvzcn2eRdo6FRGriuf4gBHmTuYPzxxQHzrwnt4vERXE",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "AL49HB8mrUudUnsfkqVoJ7NCLp2knG5A2n8g3jsBUu5y",
+    "block_height": 223915228,
+    "block_timestamp": 1794313247206045700
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3386270882596,
+    "tokens_burnt": 338627088259600000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "FqKqzacLcyGQQwt7hmBdBM5KFAec1t4M3pTSB8fPauJL",
+   "included_in_block_hash": "47QicyZUyW7ZZ6BDhyRdW1HDh23yiMWM1k6LKJxXb2iH",
+   "block_timestamp": "1794313245993956682",
+   "block": {
+    "block_height": 223915226
+   },
+   "receipt_conversion_tokens_burnt": "31478290381500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 338627088259600000000,
+     "args": "[{\"tweak\": [250, 234, 210, 99, 131, 139, 11, 68, 252, 177, 12, 206, 118, 225, 137, 61, 243, 57, 196,...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 2.800091236056e+21
+   }
+  },
+  {
+   "id": "24933019737",
+   "receipt_id": "HVeQvfqeqDtue5Kfmd8Nnzr8axC9htFbQWUwy8tpieJu",
+   "predecessor_account_id": "bitwise-mpc01.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "2UATBd62rgMLm6oDmDuVKf7Wn7YzisQ87FAXbkUL8cuc",
+    "block_height": 223915227,
+    "block_timestamp": 1794313246654843100
+   },
+   "receipt_outcome": {
+    "gas_burnt": 7996295583455,
+    "tokens_burnt": 799629558345500000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "86WHr4rmqzWgdvCUKCsCVkknenUdNFUcbkW2FcfMmcdx",
+   "included_in_block_hash": "47QicyZUyW7ZZ6BDhyRdW1HDh23yiMWM1k6LKJxXb2iH",
+   "block_timestamp": "1794313245993956682",
+   "block": {
+    "block_height": 223915226
+   },
+   "receipt_conversion_tokens_burnt": "33080463205500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 799629558345500000000,
+     "args": "{\"request\": {\"tweak\": [250, 234, 210, 99, 131, 139, 11, 68, 252, 177, 12, 206, 118, 225, 137, 61, 24...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 832710021551000000000
+   }
+  },
+  {
+   "id": "24933019749",
+   "receipt_id": "5pzgzqBeQqRaoK3XfeZQq22Z35uwUsbmqMHCXsEmqY8p",
+   "predecessor_account_id": "zcash-connector.bridge.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "2UATBd62rgMLm6oDmDuVKf7Wn7YzisQ87FAXbkUL8cuc",
+    "block_height": 223915227,
+    "block_timestamp": 1794313246654843100
+   },
+   "receipt_outcome": {
+    "gas_burnt": 4172988928856,
+    "tokens_burnt": 417298892885600000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "44fpHkyU4tFZTxD9SahmREYAxPWTGFJs7RpMSv3mRYup",
+   "included_in_block_hash": "5ZrRsWAUCrWpzHGsN29vTw48BNbN7omRmWSqqNtvz34A",
+   "block_timestamp": "1794313245478656394",
+   "block": {
+    "block_height": 223915225
+   },
+   "receipt_conversion_tokens_burnt": "31478290381500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "sign",
+     "deposit": 1,
+     "fee": 417298892885600000000,
+     "args": "{\"request\": {\"path\": \"zcash-connector.bridge.near\", \"payload\": [193, 122, 184, 176, 28, 245, 111, 24...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 2.7920659458254e+21
+   }
+  },
+  {
+   "id": "24933019748",
+   "receipt_id": "BqScibaUTPMbG4UHeL4h5HJeRyBtNkyeECHqGvpNh3Qv",
+   "predecessor_account_id": "v1.signer",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "2UATBd62rgMLm6oDmDuVKf7Wn7YzisQ87FAXbkUL8cuc",
+    "block_height": 223915227,
+    "block_timestamp": 1794313246654843100
+   },
+   "receipt_outcome": {
+    "gas_burnt": 3386196805188,
+    "tokens_burnt": 338619680518800000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "44fpHkyU4tFZTxD9SahmREYAxPWTGFJs7RpMSv3mRYup",
+   "included_in_block_hash": "5ZrRsWAUCrWpzHGsN29vTw48BNbN7omRmWSqqNtvz34A",
+   "block_timestamp": "1794313245478656394",
+   "block": {
+    "block_height": 223915225
+   },
+   "receipt_conversion_tokens_burnt": "31478290381500000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "return_signature_and_clean_state_on_success",
+     "deposit": 0,
+     "fee": 338619680518800000000,
+     "args": "[{\"tweak\": [46, 20, 49, 248, 68, 58, 202, 37, 63, 39, 52, 199, 227, 119, 255, 171, 180, 143, 223, 14...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 1
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 2.7920659458254e+21
+   }
+  },
+  {
+   "id": "24933019723",
+   "receipt_id": "2aqfd8obNZ8u25bg4QArNXd4oXXsnvxK7HgDyqVVDUTL",
+   "predecessor_account_id": "near-mpc-staking4all-01.near",
+   "receiver_account_id": "v1.signer",
+   "receipt_kind": "ACTION",
+   "receipt_block": {
+    "block_hash": "47QicyZUyW7ZZ6BDhyRdW1HDh23yiMWM1k6LKJxXb2iH",
+    "block_height": 223915226,
+    "block_timestamp": 1794313245993956600
+   },
+   "receipt_outcome": {
+    "gas_burnt": 8006031074286,
+    "tokens_burnt": 800603107428600000000,
+    "executor_account_id": "v1.signer",
+    "status": true
+   },
+   "transaction_hash": "2BvNvvUDk3k4NWGULVGxwi9B4faP4ukfbirfqEZQL1EY",
+   "included_in_block_hash": "5ZrRsWAUCrWpzHGsN29vTw48BNbN7omRmWSqqNtvz34A",
+   "block_timestamp": "1794313245478656394",
+   "block": {
+    "block_height": 223915225
+   },
+   "receipt_conversion_tokens_burnt": "33047084605000000000",
+   "actions": [
+    {
+     "action": "FUNCTION_CALL",
+     "method": "respond",
+     "deposit": 0,
+     "fee": 800603107428600000000,
+     "args": "{\"request\": {\"tweak\": [46, 20, 49, 248, 68, 58, 202, 37, 63, 39, 52, 199, 227, 119, 255, 171, 180, 1...(trimmed)"
+    }
+   ],
+   "actions_agg": {
+    "deposit": 0
+   },
+   "outcomes": {
+    "status": true
+   },
+   "outcomes_agg": {
+    "transaction_fee": 833650192033600000000
+   }
+  }
+ ]
+}
