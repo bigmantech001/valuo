@@ -4,6 +4,9 @@
 #
 #   VALUO_REMOTE=git@github.com:bigmantech001/valuo.git bash ops/vps/setup.sh
 #
+# Optional on-chain anchoring: VALUO_ANCHOR_ACCOUNT=<account>.near bash ops/vps/setup.sh installs near-cli-rs and
+# puts the account into the crontab block; its key must be in ~/.near-credentials/mainnet/<account>.json.
+#
 # Needs: an SSH deploy key with WRITE access to the repository, already loaded for this user (see docs/VPS.md).
 set -Eeuo pipefail
 
@@ -45,6 +48,19 @@ make -C "$REPO" sync
 step "push access check (dry run, nothing is changed on the remote)"
 git -C "$REPO" push --dry-run origin "HEAD:$BRANCH"
 
+ANCHOR="${VALUO_ANCHOR_ACCOUNT:-}"
+if [ -n "$ANCHOR" ]; then
+  step "on-chain anchoring as $ANCHOR (near-cli-rs)"
+  if ! command -v near >/dev/null && [ ! -x "$HOME/.cargo/bin/near" ]; then
+    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+  fi
+  export PATH="$HOME/.cargo/bin:$PATH"
+  near --version
+  if [ ! -f "$HOME/.near-credentials/mainnet/$ANCHOR.json" ]; then
+    echo "missing $HOME/.near-credentials/mainnet/$ANCHOR.json: anchoring will be skipped until the key is there (docs/VPS.md)" >&2
+  fi
+fi
+
 step "clock"
 echo "server time: $(date) | UTC: $(date -u)"
 echo "the crontab sets CRON_TZ=UTC; if your cron ignores CRON_TZ, run: sudo timedatectl set-timezone UTC"
@@ -53,6 +69,7 @@ step "crontab"
 tmp="$(mktemp)"
 { crontab -l 2>/dev/null | sed '/# >>> valuo >>>/,/# <<< valuo <<</d' || true
   echo "# >>> valuo >>>"
+  if [ -n "$ANCHOR" ]; then echo "VALUO_ANCHOR_ACCOUNT=$ANCHOR"; fi
   sed "s|__REPO__|$REPO|g" "$REPO/ops/vps/valuo.crontab"
   echo "# <<< valuo <<<"; } >"$tmp"
 crontab "$tmp"

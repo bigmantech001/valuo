@@ -39,6 +39,29 @@ The schedule lives in `ops/vps/valuo.crontab`; the History tab reads it from the
    tail -n 40 ~/valuo-logs/$(date -u +%F)-snapshot.log
    ```
 
+## Optional: anchor each snapshot on NEAR mainnet
+
+After each daily snapshot, the job can write the manifest's hashes to NEAR's SocialDB (`social.near`) under the anchoring account:
+
+```
+<account>/valuo/snapshot/<YYYYMMDDTHHMMSSZ> = {"manifest_sha256", "snapshot_sha256", "memo_sha256", "data_block_height", ...}
+```
+
+SocialDB records the block each value was written at, so anyone can check, with no key and no account, that a snapshot with exactly these hashes existed at that block: `make anchor-verify ANCHOR=<account>` (or `cd quant && uv run python -m valuo.anchor verify --account <account>`). Editing a committed manifest afterwards breaks the match.
+
+1. Create a NEAR mainnet account for this alone and fund it with about 1 NEAR. Each write attaches 0.01 NEAR, credited to the account's SocialDB storage balance; a record takes about 500 bytes (0.005 NEAR) and the rest carries over to later writes. With gas that is roughly 2 NEAR a year at one write a day; top it up as needed.
+2. Put its full-access key on the VPS as the job user (the legacy keychain format near-cli-rs reads):
+   ```bash
+   mkdir -p ~/.near-credentials/mainnet && chmod 700 ~/.near-credentials
+   cat > ~/.near-credentials/mainnet/<account>.json <<'EOF'
+   {"account_id":"<account>","public_key":"ed25519:...","private_key":"ed25519:..."}
+   EOF
+   chmod 600 ~/.near-credentials/mainnet/<account>.json
+   ```
+3. Re-run setup with the account: `VALUO_ANCHOR_ACCOUNT=<account> bash ~/valuo/ops/vps/setup.sh`. It installs near-cli-rs and adds `VALUO_ANCHOR_ACCOUNT` to the crontab block.
+
+An anchoring failure (for example an empty balance) is logged and does not fail the run; that snapshot is simply not anchored.
+
 ## Operating it
 
 - Logs: `~/valuo-logs/<date>-<job>.log`, kept 30 days.

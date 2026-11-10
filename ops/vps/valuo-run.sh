@@ -13,6 +13,9 @@
 #   VALUO_LOG_DIR     log directory                (default: $HOME/valuo-logs)
 #   VALUO_PUSH        set to 0 to commit locally without pushing (dry runs)
 #   NEARBLOCKS_API_KEY  passed through to the pipeline if set (raises NearBlocks rate limits; not required)
+#   VALUO_ANCHOR_ACCOUNT  NEAR account that anchors each snapshot's hashes in SocialDB (snapshot mode only;
+#                         needs near-cli-rs and the account's key in the legacy keychain, see docs/VPS.md)
+#   VALUO_ANCHOR_DEPOSIT  NEAR attached to each SocialDB write for storage (default 0.01)
 set -Eeuo pipefail
 
 MODE="${1:-}"
@@ -76,6 +79,23 @@ if git diff --cached --quiet; then
   exit 0
 fi
 git -c user.name="${VALUO_GIT_NAME:-valuo-bot}" -c user.email="${VALUO_GIT_EMAIL:-valuo-bot@users.noreply.github.com}" commit --quiet -m "$msg"
+
+# Anchor the committed manifest's hashes on NEAR mainnet (optional). A failure is logged, never fatal:
+# the data commit is still valid; it is just not anchored on-chain this run.
+if [ "$MODE" = snapshot ] && [ -n "${VALUO_ANCHOR_ACCOUNT:-}" ]; then
+  if command -v near >/dev/null; then
+    if anchor_args="$(cd quant && uv run python -m valuo.anchor args --account "$VALUO_ANCHOR_ACCOUNT")" &&
+      near contract call-function as-transaction social.near set json-args "$anchor_args" \
+        prepaid-gas '100.0 Tgas' attached-deposit "${VALUO_ANCHOR_DEPOSIT:-0.01} NEAR" \
+        sign-as "$VALUO_ANCHOR_ACCOUNT" network-config mainnet sign-with-legacy-keychain send; then
+      (cd quant && uv run python -m valuo.anchor verify --account "$VALUO_ANCHOR_ACCOUNT") || echo "anchor written but verify did not match yet (finality lag?); re-check: make anchor-verify"
+    else
+      echo "anchor: social.near set failed; snapshot not anchored this run"
+    fi
+  else
+    echo "anchor: VALUO_ANCHOR_ACCOUNT is set but near-cli-rs is not installed; skipping"
+  fi
+fi
 
 if [ "${VALUO_PUSH:-1}" = 0 ]; then
   echo "VALUO_PUSH=0: committed locally, not pushed"
