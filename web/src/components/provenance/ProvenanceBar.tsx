@@ -9,6 +9,7 @@ import type { Freshness, Integrity, Manifest, RawRecord, Snapshot } from "@/lib/
 import type { BadgeVariant } from "@/components/ui/Badge";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { BurgerButton, useDrawer } from "@/components/ui/MobileDrawer";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { ProvenanceDrawer } from "./ProvenanceDrawer";
 import { ReproduceButton } from "./ReproduceButton";
@@ -33,6 +34,7 @@ export interface ProvenanceBarProps {
  */
 export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, initialIntegrity = null, pollMs = 60_000 }: ProvenanceBarProps) {
   const [drawer, setDrawer] = useState(false);
+  const nav = useDrawer();
   const [freshness, setFreshness] = useState<Freshness | null>(initialFreshness);
   const [integrity, setIntegrity] = useState<Integrity | null>(initialIntegrity);
   const index = useMemo(() => buildManifestIndex(manifest), [manifest]);
@@ -66,11 +68,11 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-canvas/90 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
-        <div className="mx-auto flex max-w-none flex-wrap items-center gap-x-8 gap-y-2 px-6 lg:px-[1.25vw] py-3">
+        <div className="mx-auto flex h-14 max-w-none items-center gap-x-3 px-4 sm:px-6 lg:h-auto lg:flex-wrap lg:gap-x-8 lg:gap-y-2 lg:px-[1.25vw] lg:py-3">
           <Link href="/" className="font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
             Valuo
           </Link>
-          <nav aria-label="Primary" className="flex items-center gap-5 text-[14px]">
+          <nav aria-label="Primary" className="hidden items-center gap-5 text-[14px] lg:flex">
             <Link href="/" className="text-muted hover:text-ink">
               Overview
             </Link>
@@ -79,22 +81,25 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
             </Link>
           </nav>
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <ReproduceButton />
-            <Button variant="secondary" size="xs" onClick={() => setDrawer(true)} disabled={!manifest} title={manifest ? `${fmtInt(manifest.records.length)} raw payloads hashed; snapshot ${fmtHash(manifest.snapshot_sha256, 12)}` : "no manifest.json"}>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden lg:contents">
+              <ReproduceButton />
+            </span>
+            <Button variant="secondary" size="xs" className="max-lg:min-h-10 max-lg:px-3 max-lg:text-[13.5px]" onClick={() => setDrawer(true)} disabled={!manifest} title={manifest ? `${fmtInt(manifest.records.length)} raw payloads hashed; snapshot ${fmtHash(manifest.snapshot_sha256, 12)}` : "no manifest.json"}>
               {integrity?.matches === true ? <span className="h-1.5 w-1.5 rounded-full bg-emerald" aria-hidden /> : integrity?.matches === false ? <span className="h-1.5 w-1.5 rounded-full bg-crimson" aria-hidden /> : null}
               Verify sources
             </Button>
-            <LinkButton href="/api/snapshot?format=memo" download variant="primary" size="xs" aria-disabled={!snapshot} className={cn(!snapshot && "pointer-events-none opacity-50")}>
+            <LinkButton href="/api/snapshot?format=memo" download variant="primary" size="xs" aria-disabled={!snapshot} className={cn("max-lg:hidden", !snapshot && "pointer-events-none opacity-50")}>
               Download IC memo
             </LinkButton>
-            <LinkButton href="/api/snapshot?format=json" download variant="ghost" size="xs" aria-disabled={!snapshot} className={cn(!snapshot && "pointer-events-none opacity-50")}>
+            <LinkButton href="/api/snapshot?format=json" download variant="ghost" size="xs" aria-disabled={!snapshot} className={cn("max-lg:hidden", !snapshot && "pointer-events-none opacity-50")}>
               JSON
             </LinkButton>
+            <BurgerButton open={nav.open} onClick={nav.toggle} controls="terminal-sections" />
           </div>
         </div>
         <div className="border-t border-border/70">
-          <div className="tnum mx-auto flex max-w-none flex-wrap items-center gap-x-2 gap-y-1 px-6 lg:px-[1.25vw] py-1.5 text-[12.5px] text-muted">
+          <div className="tnum valuo-scroll mx-auto flex max-w-none items-center gap-x-2 gap-y-1 overflow-x-auto whitespace-nowrap px-4 py-1.5 text-[12px] text-muted sm:px-6 lg:flex-wrap lg:overflow-visible lg:whitespace-normal lg:px-[1.25vw] lg:text-[12.5px]">
             {rpc ? (
               <>
                 <span>
@@ -112,10 +117,10 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
                   </span>
                 </Tooltip>
                 {blockRecord ? (
-                  <>
+                  <span className="hidden items-center gap-x-2 lg:inline-flex">
                     <Sep />
                     <ProvenanceBadge record={blockRecord} label="read from NEAR RPC" />
-                  </>
+                  </span>
                 ) : null}
               </>
             ) : (
