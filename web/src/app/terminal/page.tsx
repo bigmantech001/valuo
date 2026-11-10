@@ -9,6 +9,7 @@ import { loadHistory } from "@/lib/history";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs } from "@/components/ui/Tabs";
 import { DrawerProvider } from "@/components/ui/MobileDrawer";
+import { AnalystPanel } from "@/components/analyst/AnalystPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ function NavCount({ children, tone = "neutral", title }: { children: React.React
 const railLink = "flex items-center gap-3 rounded-lg px-3 py-2 max-lg:min-h-11 max-lg:text-[15px] text-[13.5px] text-muted transition-colors hover:bg-surface-2/60 hover:text-ink";
 
 /**
- * /terminal - the six-tab Investment Committee terminal (tab 6 reads artifacts/history/summary.json).
+ * /terminal - the seven-tab Investment Committee terminal (tab 6 reads artifacts/history/summary.json; tab 7 is the NEAR AI analyst, /api/analyst).
  * Server component: loads artifacts/latest_snapshot.json + manifest.json, renders the
  * provenance bar and the five tabs. With no snapshot it renders the reproduction instructions.
  * The marketing/landing page lives at "/" and links here via "Launch app".
@@ -69,6 +70,7 @@ export default async function TerminalPage() {
               { id: "sotp", kicker: "04", label: "SOTP & Monte Carlo", content: <Tab4Sotp snapshot={snapshot} manifest={manifest} /> },
               { id: "bear", kicker: "05", label: "Bear case", badge: typeof snapshot.bear_case?.triggers_breached === "number" ? <NavCount tone={snapshot.bear_case.triggers_breached > 0 ? "crimson" : "neutral"} title="Falsification triggers breached / graded">{snapshot.bear_case.triggers_breached}/{snapshot.bear_case.triggers_evaluated ?? "?"}</NavCount> : undefined, content: <Tab5BearCase snapshot={snapshot} manifest={manifest} /> },
               { id: "history", kicker: "06", label: "History", badge: history.summary ? <NavCount title="Canonical daily snapshots recorded">{history.summary.snapshots.n_records}</NavCount> : undefined, content: <Tab6History history={history} snapshot={snapshot} schedules={schedules} /> },
+              { id: "analyst", kicker: "07", label: "Ask the analyst", content: <AnalystPanel /> },
             ]}
           />
         ) : (

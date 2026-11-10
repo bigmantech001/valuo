@@ -44,3 +44,6 @@ vendor/
 Thumbs.db
 .idea/
 .vscode/
+
+# local agent worktrees
+.claude/worktrees/
