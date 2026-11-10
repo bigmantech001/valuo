@@ -18,6 +18,15 @@ const SIZE: Record<ButtonSize, string> = {
   md: "px-4 py-2 text-[14.5px]",
 };
 
+/** Touch screens (below lg): every button at least 36px tall, primary actions at least 44px. */
+const TOUCH: Record<ButtonVariant, string> = {
+  primary: "max-lg:min-h-11",
+  accent: "max-lg:min-h-11",
+  secondary: "max-lg:min-h-9",
+  ghost: "max-lg:min-h-9",
+  danger: "max-lg:min-h-9",
+};
+
 const BASE = "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-50";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -29,7 +38,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({ variant = "secondary", size = "sm", loading = false, leftIcon, className, children, disabled, type = "button", ...rest }: ButtonProps) {
   return (
-    <button type={type} disabled={disabled || loading} aria-busy={loading || undefined} className={cn(BASE, VARIANT[variant], SIZE[size], className)} {...rest}>
+    <button type={type} disabled={disabled || loading} aria-busy={loading || undefined} className={cn(BASE, VARIANT[variant], SIZE[size], TOUCH[variant], className)} {...rest}>
       {loading ? <span aria-hidden className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : leftIcon}
       {children}
     </button>
@@ -45,7 +54,7 @@ export interface LinkButtonProps extends AnchorHTMLAttributes<HTMLAnchorElement>
 /** Anchor styled as a button (downloads, external explorer links). */
 export function LinkButton({ variant = "secondary", size = "sm", leftIcon, className, children, ...rest }: LinkButtonProps) {
   return (
-    <a className={cn(BASE, VARIANT[variant], SIZE[size], className)} {...rest}>
+    <a className={cn(BASE, VARIANT[variant], SIZE[size], TOUCH[variant], className)} {...rest}>
       {leftIcon}
       {children}
     </a>

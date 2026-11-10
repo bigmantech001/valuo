@@ -144,3 +144,39 @@ li code,
 td code {
   overflow-wrap: anywhere;
 }
+
+/* ---- Phone / tablet (below lg). Desktop is unchanged. ------------------------------------------------ */
+/* `clip`, not `hidden`: hidden would make <body> a scroll container and break the sticky headers. */
+html,
+body {
+  overflow-x: clip;
+}
+
+@media (max-width: 1023.98px) {
+  /* iOS Safari zooms on focus below 16px. */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  /* A bigger touch target for sliders without changing the drawn track. */
+  input[type="range"] {
+    min-height: 28px;
+  }
+  /* Grid and flex children may not grow wider than the screen because of one long line. */
+  main :where(div, section, article, li) {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
