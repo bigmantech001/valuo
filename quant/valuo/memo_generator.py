@@ -674,8 +674,64 @@ def _section_sotp(snap: Snapshot) -> str:
         f"Current FDV {fmt_usd(sotp.current_fdv_usd)}; confidential share used in the split {fmt_pct(hm.get('confidential_share_used'), 1)}. "
         "Cells hold volume and take constant for the horizon with alpha folded into the net take; they are deterministic run-rate marks, not forecasts "
         "and not Monte Carlo percentiles (the snapshot field is named fdv_p50 for compatibility).",
+        "",
+        f"### {SEC['sotp']}.5 Out-of-sample backtest of the volume engine",
+        _backtest_paragraph(snap),
     ]
     return "\n".join(parts)
+
+
+def _backtest_paragraph(snap: Snapshot) -> str:
+    """Coverage and bias of the volume GBM re-calibrated at each historical origin (models/backtest.py)."""
+    bt = getattr(snap, "backtest", None)
+    if not isinstance(bt, Mapping) or not bt.get("rows"):
+        return "Not computed this run: `backtest` is null or has no scored forecasts (see warnings)."
+    by_h = bt.get("by_horizon") or {}
+    rows = []
+    for h, s in by_h.items():
+        if not s.get("n"):
+            continue
+        ci = s.get("coverage_ci90_wilson") or [None, None]
+        rows.append([
+            f"{h} month{'s' if h != '1' else ''}", fmt_int(s["n"]), f"{fmt_pct(s['coverage_p10_p90'], 0)} [{fmt_pct(ci[0], 0)}-{fmt_pct(ci[1], 0)}]",
+            fmt_num(s.get("binom_p_vs_80"), 2), f"{fmt_int(s['below_p10'])} / {fmt_int(s['above_p90'])}",
+            f"{fmt_num(s.get('median_ratio_realized_to_p50'), 2)}x", " ".join(str(c) for c in s.get("pit_hist") or []),
+        ])
+    s1 = by_h.get("1") or {}
+    r1 = s1.get("median_ratio_realized_to_p50")
+    direction = "under-predicts" if isinstance(r1, (int, float)) and r1 > 1 else "over-predicts"
+    per = bt.get("by_period") or {}
+    e1, l1 = (per.get("early") or {}).get("1") or {}, (per.get("late") or {}).get("1") or {}
+    def _cov_list(block: Mapping[str, Any]) -> str:
+        return ", ".join(f"{h}m {fmt_pct(s.get('coverage_p10_p90'), 0)} (n = {fmt_int(s.get('n'))})" for h, s in block.items() if s.get("n"))
+
+    split = (
+        f" Split at the middle origin ({per.get('split_origin_date')}), coverage before: {_cov_list(per.get('early') or {})}; "
+        f"from it: {_cov_list(per.get('late') or {})}."
+        if e1.get("n") and l1.get("n") else ""
+    )
+    misses = [r for r in bt.get("rows") or [] if not r.get("inside")]
+    if split and misses:
+        early_miss = sum(1 for r in misses if str(r.get("origin_date")) < str(per.get("split_origin_date")))
+        above = sum(1 for r in misses if r.get("realized_30d_usd", 0) > r.get("p90", float("inf")))
+        split += f" {early_miss} of the {len(misses)} misses come from origins before the split; {above} of {len(misses)} are realized volume above P90."
+    md = ((bt.get("variants") or {}).get("measured_drift") or {}).get("by_horizon") or {}
+    md_txt = ", ".join(f"{h}m {fmt_pct(s.get('coverage_p10_p90'), 0)}" for h, s in md.items() if s.get("n"))
+    verdict = "passes at every horizon" if (bt.get("calibrated") or {}).get("all") else "fails at " + (
+        ", ".join(f"{h}m" for h, ok in ((bt.get("calibrated") or {}).get("per_horizon") or {}).items() if ok is False) or "n/a")
+    text = (
+        f"At each of {fmt_int(bt.get('n_origins'))} monthly origins from {bt.get('first_origin')} to {bt.get('last_origin')} the volume GBM was re-calibrated "
+        f"on data up to the origin only (trailing 30-day volume, sigma from the trailing 365 days, drift = public_volume_growth_yoy "
+        f"{fmt_pct(bt.get('growth_yoy_used'), 0)}) and its P10-P90 band for 30-day volume was compared with what happened "
+        f"({bt.get('source')}, {bt.get('first_day')} to {bt.get('last_day')}). The test of 80% coverage {verdict} "
+        f"({bt.get('calibrated', {}).get('rule')}). At 1 month the median realized volume is {fmt_num(r1, 2)}x the forecast median: the model {direction}."
+        f"{split} With the drift replaced by the trailing mean log return (no registry input) coverage is {md_txt or 'n/a'}. "
+        "Not backtested: " + "; ".join(bt.get("not_tested") or []) + ". 3- and 6-month forecasts from monthly origins overlap, so their errors are correlated "
+        "and the binomial interval overstates the precision."
+    )
+    table = _table(["Horizon", "n", "P10-P90 coverage [90% Wilson]", "Binomial p vs 80%", "Below P10 / above P90", "Median realized / P50", "PIT histogram (5 bins)"],
+                   rows, ["l", "r", "r", "r", "r", "r", "l"])
+    return text + "\n\n" + table
 
 
 def _trigger_status(breached: bool | None, evaluated: bool | None = None) -> str:

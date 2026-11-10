@@ -54,7 +54,7 @@ export interface TimeChartProps {
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const STEPS = [5 * 60_000, 15 * 60_000, 30 * 60_000, HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 91 * DAY];
+const STEPS = [5 * 60_000, 15 * 60_000, 30 * 60_000, HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 91 * DAY, 182 * DAY];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function ms(t: string): number {
@@ -66,6 +66,22 @@ function timeTicks([lo, hi]: [number, number], target: number): { ticks: number[
   const span = hi - lo;
   const step = STEPS.find((s) => span / s <= target) ?? STEPS[STEPS.length - 1];
   const ticks: number[] = [];
+  if (step >= 30 * DAY) {
+    // Month-scale spans: ticks on the first of every 1, 3 or 6 calendar months.
+    const k = Math.round(step / (30 * DAY)) >= 6 ? 6 : Math.round(step / (30 * DAY)) >= 3 ? 3 : 1;
+    const d0 = new Date(lo);
+    let y = d0.getUTCFullYear();
+    let m = Math.ceil((d0.getUTCMonth() + (d0.getUTCDate() > 1 ? 1 : 0)) / k) * k;
+    for (let t = Date.UTC(y, m, 1); t <= hi; t = Date.UTC(y, m, 1)) {
+      ticks.push(t);
+      m += k;
+      if (m >= 12) {
+        y += Math.floor(m / 12);
+        m %= 12;
+      }
+    }
+    return { ticks, step };
+  }
   for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
   return { ticks, step };
 }
@@ -73,6 +89,7 @@ function timeTicks([lo, hi]: [number, number], target: number): { ticks: number[
 function fmtTick(t: number, step: number): string {
   const d = new Date(t);
   const p = (n: number) => String(n).padStart(2, "0");
+  if (step >= 30 * DAY) return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   const date = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
   if (step >= DAY) return date;
   const time = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;

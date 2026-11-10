@@ -30,7 +30,7 @@ import math
 import sys
 import time
 import traceback
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +56,7 @@ from valuo.memo_generator import (
     render_readme_findings,
 )
 from valuo import history
+from valuo.models.backtest import backtest_from_raw
 from valuo.models.bear_case import THIN_SOLVER_SAMPLE_FILLS, live_metrics, run_bear_case
 from valuo.models.market_implied import run_market_implied
 from valuo.models.relative_value import run_relative_value
@@ -696,11 +697,13 @@ DERIVED_MODELS: tuple[tuple[str, Any], ...] = (
 )
 
 
-def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None = None, log: Any = None) -> list[str]:
+def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None = None, log: Any = None, raw_dir: Path | None = None) -> list[str]:
     """Run market_implied / sensitivity / relative_value on the snapshot's JSON dict and attach them as top-level keys.
 
     A model that raises leaves its key null and adds a warning (returned and merged into ``snapshot.warnings``);
     the run is never aborted by a derived view. Each model's wall time goes into ``timings`` under its key.
+    The volume backtest (``snapshot.backtest``) reads the run's persisted DefiLlama dexs payload from ``raw_dir``
+    (else the 365-day series in the snapshot) and appends its graded claim to the evidence scorecard.
     """
     snap_dict = sanitize_json(snapshot.model_dump(mode="json"))
     out: list[str] = []
@@ -716,9 +719,49 @@ def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None =
                 log(f"{key} failed: {type(exc).__name__}: {exc}")
         if timings is not None:
             timings[key] = round(time.perf_counter() - t0, 3)
+    # ---- backtest (begin): out-of-sample test of the volume engine + its scorecard claim
+    t0 = time.perf_counter()
+    try:
+        bt = backtest_from_raw(snap_dict, raw_dir)
+        snapshot.backtest = bt  # type: ignore[attr-defined]  # extra field (OpenModel allows extras)
+        snapshot.evidence_scorecard = [*snapshot.evidence_scorecard, backtest_claim(bt)]
+    except Exception as exc:  # noqa: BLE001 - a derived view, not a prerequisite
+        snapshot.backtest = None  # type: ignore[attr-defined]
+        out.append(f"reproduce: backtest failed ({type(exc).__name__}: {exc}); snapshot.backtest is null")
+        if log is not None:
+            log(f"backtest failed: {type(exc).__name__}: {exc}")
+    if timings is not None:
+        timings["backtest"] = round(time.perf_counter() - t0, 3)
+    # ---- backtest (end)
     if out:
         snapshot.warnings = _merge_warnings(snapshot.warnings, out)
     return out
+
+
+def backtest_claim(bt: Mapping[str, Any]) -> EvidenceClaim:
+    """Scorecard row for the volume backtest: DERIVED only when P10-P90 coverage is not rejected at every horizon."""
+    by_h = bt.get("by_horizon") or {}
+    scored = {h: s for h, s in by_h.items() if s.get("n")}
+    cov = "; ".join(
+        f"{h}m {s['inside']}/{s['n']} = {s['coverage_p10_p90']:.0%} inside P10-P90 (binomial p {s['binom_p_vs_80']:.2f})" for h, s in scored.items()
+    ) or "no scored forecasts"
+    r1 = (by_h.get("1") or {}).get("median_ratio_realized_to_p50")
+    bias = "" if r1 is None else f"; 1m median realized / forecast median {r1:.2f}x ({'under' if r1 > 1 else 'over'}-prediction)"
+    per = bt.get("by_period") or {}
+    split = ""
+    e, late = (per.get("early") or {}).get("1") or {}, (per.get("late") or {}).get("1") or {}
+    if e.get("n") and late.get("n"):
+        split = f"; 1m coverage {e['coverage_p10_p90']:.0%} for origins before {per['split_origin_date']}, {late['coverage_p10_p90']:.0%} from it"
+    ok = bool((bt.get("calibrated") or {}).get("all")) and bool(scored)
+    return _claim(
+        "The volume engine (GBM with measured sigma) is calibrated out of sample: P10-P90 covers ~80% of realized 30-day volume",
+        "DERIVED" if ok else "NOT_SUPPORTED",
+        f"{cov}{bias}{split}; {bt.get('n_origins', 0)} monthly origins {bt.get('first_origin')} to {bt.get('last_origin')}",
+        f"{bt.get('source')}" + (f" sha256 {str(bt['source_sha256'])[:12]}..." if bt.get("source_sha256") else ""),
+        "medium" if ok else "low",
+        "Tests the volume distribution only; the take rate, holder capture, confidential share, multiple and discount rate are not "
+        "backtested. 3m and 6m forecasts from monthly origins overlap, so their effective sample is smaller than n.",
+    )
 
 
 # ============================================================================ pipeline
@@ -789,7 +832,7 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
     )
     # Reverse valuation, tornado and relative value read the snapshot as JSON (the same dict the web and the CLIs see).
     # A failure here never aborts the run: the key is null and a warning says why.
-    attach_derived_models(snapshot, timings, log)
+    attach_derived_models(snapshot, timings, log, raw_dir=paths["raw"])
     snapshot.timings_s = timings
     sanitize_json(snapshot.model_dump(mode="json"), hits=nan_hits)
     if nan_hits:

@@ -233,8 +233,12 @@ def test_attach_derived_models_populates_keys_and_records_timings():
     timings: dict[str, float] = {}
     warnings = rp.attach_derived_models(snap, timings)
     assert warnings == []
-    assert set(timings) == {"market_implied", "sensitivity", "relative_value", "bull_case"}
+    assert set(timings) == {"market_implied", "sensitivity", "relative_value", "bull_case", "backtest"}
     assert snap.market_implied["solves"] and snap.sensitivity["rows"] and snap.relative_value["coverage"] and snap.bull_case["conditions"]
+    # no raw_dir given: the backtest falls back to the 365-day series in the snapshot and adds one scorecard claim
+    assert snap.backtest["by_horizon"]["1"]["n"] > 0
+    claim = next(c for c in snap.evidence_scorecard if c.claim.startswith("The volume engine"))
+    assert claim.status in {"DERIVED", "NOT_SUPPORTED"} and "inside P10-P90" in claim.value
     dumped = rp.sanitize_json(snap.model_dump(mode="json"))
     assert isinstance(dumped["market_implied"]["headline"], str)
 

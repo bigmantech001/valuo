@@ -6,6 +6,7 @@ import { fmtBps, fmtInt, fmtPct, fmtUsdCompact, fmtUtc } from "@/lib/format";
 import type { HistoryLoad, SeriesBlock, SeriesStats } from "@/lib/history";
 import { COLORS, SERIES_COLORS } from "@/lib/theme";
 import type { CorridorArchetype, Snapshot } from "@/lib/types";
+import { BacktestPanel } from "./BacktestPanel";
 import { fmtDay, fmtSpan, plural, spanMs, statsOf, type WorkflowSchedule } from "./derive";
 import { HistoryChartCard, type RunCount } from "./HistoryChartCard";
 import { RaceCellTable } from "./RaceCellTable";
@@ -262,6 +263,8 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
         </div>
         <TriggerHistoryTable triggers={snaps.bear_triggers} titles={titles} />
       </section>
+
+      <BacktestPanel backtest={snapshot?.backtest} />
 
       <MethodNote summary="Method, sources and how to add points">
         <p>

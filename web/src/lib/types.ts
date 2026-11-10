@@ -1329,7 +1329,7 @@ export type RunConfig = {
 };
 
 /** Pipeline stages timed by reproduce.py (`snapshot.timings_s` keys). */
-export type ReproduceStage = "near_rpc" | "api_collectors" | "supply_physics" | "sotp" | "bear_case";
+export type ReproduceStage = "near_rpc" | "api_collectors" | "supply_physics" | "sotp" | "bear_case" | "backtest";
 
 export interface Snapshot {
   schema_version: string;
@@ -1356,6 +1356,8 @@ export interface Snapshot {
   market_implied?: MarketImplied | null;
   sensitivity?: Sensitivity | null;
   relative_value?: RelativeValue | null;
+  /** Out-of-sample volume-engine backtest (quant/valuo/models/backtest.py); absent from older snapshots. */
+  backtest?: VolumeBacktest | null;
   // bull_case.py: the long-term case as falsifiable conditions graded against live data.
   bull_case?: BullCase | null;
 }
@@ -1398,6 +1400,72 @@ export interface BullCase {
   headline: string;
   watch: string[];
 }
+
+// --------------------------------------------------------------------------- volume backtest
+/** One scored forecast: origin t, horizon h months, model band for 30-day volume vs the realized 30-day sum. */
+export type BacktestRow = {
+  origin_date: string;
+  target_date: string;
+  h: number;
+  v0_30d_usd: number;
+  sigma_volume_monthly: number;
+  sigma_volume_measured: boolean;
+  sigma_n_monthly_returns: number | null;
+  log_growth_monthly: number;
+  p10: number;
+  p50: number;
+  p90: number;
+  mean: number;
+  realized_30d_usd: number;
+  inside: boolean;
+  log_error: number;
+  pit: number;
+};
+
+export type BacktestHorizonStats = {
+  n: number;
+  inside?: number;
+  coverage_p10_p90: number | null;
+  coverage_ci90_wilson: [number, number] | null;
+  binom_p_vs_80: number | null;
+  below_p10: number;
+  above_p90: number;
+  median_log_error: number | null;
+  mean_log_error: number | null;
+  median_abs_log_error: number | null;
+  median_ratio_realized_to_p50: number | null;
+  share_realized_above_p50: number | null;
+  pit_hist: number[];
+};
+
+export type VolumeBacktest = {
+  method: string;
+  source: string;
+  source_sha256: string | null;
+  growth_yoy_used: number;
+  horizons_months: number[];
+  step_days: number;
+  window_days: number;
+  sigma_lookback_days: number;
+  target_coverage: number;
+  pit_bins: number;
+  n_days: number;
+  n_gaps: number;
+  first_day: string | null;
+  last_day: string | null;
+  not_tested: string[];
+  caveats: string[];
+  n_origins: number;
+  first_origin: string | null;
+  last_origin: string | null;
+  rows: BacktestRow[];
+  /** keyed by horizon in months as a string ("1", "3", "6") */
+  by_horizon: Record<string, BacktestHorizonStats>;
+  variants?: { measured_drift?: { by_horizon: Record<string, BacktestHorizonStats>; rows: BacktestRow[] } };
+  by_period?: { split_origin_date: string; rule: string; early: Record<string, BacktestHorizonStats>; late: Record<string, BacktestHorizonStats> };
+  calibrated: { per_horizon: Record<string, boolean | null>; all: boolean; rule: string };
+  headline: string;
+};
 
 // --------------------------------------------------------------------------- market-implied solves
 /** `market_implied.solves[].evidence`: the measured (or assumed) comparator for a required value. */
