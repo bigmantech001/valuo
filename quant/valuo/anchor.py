@@ -9,22 +9,29 @@ call (no key, no account), so anyone can check that a snapshot with exactly thes
 block and has not been edited since: a later edit would change the hashes, and a re-write would change
 the write block.
 
-Writing needs a funded NEAR account and runs only on the VPS (``ops/vps/valuo-run.sh``, near-cli-rs).
-This module builds the write arguments and verifies; it never holds a key.
+Writing needs a funded NEAR account and runs only on the VPS (``ops/vps/valuo-run.sh``). ``publish`` builds the
+``social.near`` ``set`` transaction (Borsh), signs its SHA-256 with the account's ed25519 key through the system
+``openssl`` (no extra Python dependency, no downloaded binary) and sends it over public RPC. The key is read from
+``~/.near-credentials/mainnet/<account>.json`` (the near-cli legacy keychain format) and never leaves the process.
 
 CLI::
 
     uv run python -m valuo.anchor args                   # print the social.near `set` JSON args for the current manifest
     uv run python -m valuo.anchor verify --account A     # check the local manifest against what A anchored on-chain
     uv run python -m valuo.anchor list --account A       # list every anchored snapshot with its write block
+    uv run python -m valuo.anchor publish --account A    # sign and send the social.near write (needs A's key)
 """
 from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
+import struct
+import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +45,11 @@ SOCIAL_CONTRACT = "social.near"
 NAMESPACE = "valuo/snapshot"
 ANCHOR_SCHEMA = "valuo-anchor/1"
 ANCHOR_ACCOUNT_ENV = "VALUO_ANCHOR_ACCOUNT"
+ANCHOR_GAS = 100 * 10**12            # 100 Tgas; a SocialDB set of ~500 bytes uses well under this
+ANCHOR_DEPOSIT_YOCTO = 10**22       # 0.01 NEAR, credited to the account's SocialDB storage balance
+_B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+_ED25519_PKCS8_PREFIX = bytes.fromhex("302e020100300506032b657004220420")
+_ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 
 
 def repo_root() -> Path:
@@ -158,6 +170,101 @@ def verify(account: str, manifest_file: Path | None = None) -> dict[str, Any]:
     return out
 
 
+# ---------------------------------------------------------------------------------------------- signing / sending
+def b58decode(s: str) -> bytes:
+    n = 0
+    for ch in s:
+        n = n * 58 + _B58.index(ch)
+    raw = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
+    return b"\0" * (len(s) - len(s.lstrip("1"))) + raw
+
+
+def b58encode(b: bytes) -> str:
+    n, out = int.from_bytes(b, "big"), ""
+    while n:
+        n, r = divmod(n, 58)
+        out = _B58[r] + out
+    return "1" * (len(b) - len(b.lstrip(b"\0"))) + out
+
+
+def _bstr(s: str) -> bytes:
+    b = s.encode()
+    return struct.pack("<I", len(b)) + b
+
+
+def borsh_function_call_tx(signer: str, public_key: bytes, nonce: int, receiver: str, block_hash: bytes,
+                           method: str, args: bytes, gas: int, deposit: int) -> bytes:
+    """Borsh bytes of a NEAR Transaction (V0) with one FunctionCall action.
+
+    Layout: signer_id, PublicKey{ED25519=0, 32 bytes}, nonce u64, receiver_id, block_hash [32], Vec<Action> with
+    Action::FunctionCall (enum index 2) = {method_name, args Vec<u8>, gas u64, deposit u128}."""
+    if len(public_key) != 32 or len(block_hash) != 32:
+        raise ValueError("public key and block hash must be 32 bytes")
+    action = b"\x02" + _bstr(method) + struct.pack("<I", len(args)) + args + struct.pack("<Q", gas) + deposit.to_bytes(16, "little")
+    return (_bstr(signer) + b"\x00" + public_key + struct.pack("<Q", nonce) + _bstr(receiver) + block_hash
+            + struct.pack("<I", 1) + action)
+
+
+def ed25519_sign(seed: bytes, message: bytes) -> bytes:
+    """Ed25519 signature via the system openssl (3.x). The key file lives in a 0700 temp dir only for the call."""
+    with tempfile.TemporaryDirectory() as t:
+        key, msg, sig = Path(t, "k.der"), Path(t, "m"), Path(t, "s")
+        old = os.umask(0o077)
+        try:
+            key.write_bytes(_ED25519_PKCS8_PREFIX + seed)
+            msg.write_bytes(message)
+        finally:
+            os.umask(old)
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-rawin", "-inkey", str(key), "-keyform", "DER", "-in", str(msg), "-out", str(sig)],
+                       check=True, capture_output=True)
+        out = sig.read_bytes()
+    if len(out) != 64:
+        raise RuntimeError("openssl returned a malformed ed25519 signature")
+    return out
+
+
+def ed25519_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
+    with tempfile.TemporaryDirectory() as t:
+        pub, msg, sig = Path(t, "p.der"), Path(t, "m"), Path(t, "s")
+        pub.write_bytes(_ED25519_SPKI_PREFIX + public_key)
+        msg.write_bytes(message)
+        sig.write_bytes(signature)
+        r = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-rawin", "-inkey", str(pub), "-keyform", "DER", "-in", str(msg), "-sigfile", str(sig)],
+                           capture_output=True)
+    return r.returncode == 0
+
+
+def load_key(account: str, keydir: Path | None = None) -> tuple[bytes, bytes]:
+    """(seed, public_key) from ~/.near-credentials/mainnet/<account>.json; checks the pair matches."""
+    path = (keydir or Path.home() / ".near-credentials" / "mainnet") / f"{account}.json"
+    data = json.loads(path.read_text())
+    secret = b58decode(str(data["private_key"]).split(":", 1)[1])
+    pub = b58decode(str(data["public_key"]).split(":", 1)[1])
+    if len(secret) != 64 or secret[32:] != pub:
+        raise ValueError(f"{path}: private key does not match its public key")
+    return secret[:32], pub
+
+
+def publish(account: str, manifest_file: Path | None = None, *, url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
+    """Sign and send the social.near `set` for the current manifest; returns the tx hash and final status."""
+    seed, pub = load_key(account, keydir)
+    args = json.dumps(set_args(account, manifest_file), separators=(",", ":")).encode()
+    ak = _rpc("query", {"request_type": "view_access_key", "finality": "final", "account_id": account,
+                        "public_key": "ed25519:" + b58encode(pub)}, url)
+    tx = borsh_function_call_tx(account, pub, int(ak["nonce"]) + 1, SOCIAL_CONTRACT, b58decode(ak["block_hash"]),
+                                "set", args, ANCHOR_GAS, ANCHOR_DEPOSIT_YOCTO)
+    digest = hashlib.sha256(tx).digest()
+    sig = ed25519_sign(seed, digest)
+    if not ed25519_verify(pub, digest, sig):
+        raise RuntimeError("local signature check failed; not sending")
+    signed = base64.b64encode(tx + b"\x00" + sig).decode()
+    res = _rpc("send_tx", {"signed_tx_base64": signed, "wait_until": "FINAL"}, url)
+    outcome = res.get("status") or (res.get("transaction_outcome") or {}).get("outcome", {}).get("status")
+    failure = outcome.get("Failure") if isinstance(outcome, dict) else None
+    return {"tx_hash": b58encode(digest), "ok": failure is None, "status": outcome, "failure": failure,
+            "explorer": f"https://nearblocks.io/txns/{b58encode(digest)}"}
+
+
 def _account(arg: str | None) -> str:
     acct = arg or os.environ.get(ANCHOR_ACCOUNT_ENV)
     if not acct:
@@ -168,7 +275,7 @@ def _account(arg: str | None) -> str:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="valuo.anchor", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("args", "verify", "list"):
+    for name in ("args", "verify", "list", "publish"):
         s = sub.add_parser(name)
         s.add_argument("--account")
         if name != "list":
@@ -183,6 +290,10 @@ def main(argv: list[str] | None = None) -> int:
             v = hit["value"] or {}
             print(f"{key}  write_block={hit['write_block_height']}  data_block={v.get('data_block_height')}  manifest={str(v.get('manifest_sha256'))[:16]}...")
         return 0
+    if a.cmd == "publish":
+        out = publish(acct, a.manifest)
+        print(json.dumps(out, indent=2, default=str))
+        return 0 if out["ok"] else 1
     res = verify(acct, a.manifest)
     print(json.dumps(res, indent=2))
     return 0 if res["ok"] else 1
