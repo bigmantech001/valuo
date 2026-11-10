@@ -11,6 +11,17 @@ import { Tabs } from "@/components/ui/Tabs";
 
 export const dynamic = "force-dynamic";
 
+/** Small count chip for the sidebar (like a notification count, but for evidence). */
+function NavCount({ children, tone = "neutral", title }: { children: React.ReactNode; tone?: "neutral" | "crimson"; title?: string }) {
+  return (
+    <span title={title} className={tone === "crimson" ? "tnum rounded-full bg-crimson/10 px-2 py-0.5 text-[11.5px] text-crimson" : "tnum rounded-full bg-surface-2 px-2 py-0.5 text-[11.5px] text-muted"}>
+      {children}
+    </span>
+  );
+}
+
+const railLink = "flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] text-muted transition-colors hover:bg-surface-2/60 hover:text-ink";
+
 /**
  * /terminal - the six-tab Investment Committee terminal (tab 6 reads artifacts/history/summary.json).
  * Server component: loads artifacts/latest_snapshot.json + manifest.json, renders the
@@ -34,13 +45,28 @@ export default async function TerminalPage() {
         <h1 className="sr-only">Valuo NEAR Investment Committee terminal</h1>
         {snapshot ? (
           <Tabs
+            variant="sidebar"
+            railTitle="IC terminal"
+            railFooter={
+              <div className="flex flex-col">
+                <a href="/api/snapshot?format=memo" download className={railLink}>
+                  Download IC memo
+                </a>
+                <a href="/api/snapshot?format=json" download className={railLink}>
+                  Snapshot JSON
+                </a>
+                <Link href="/" className={railLink}>
+                  Overview
+                </Link>
+              </div>
+            }
             tabs={[
               { id: "thesis", kicker: "01", label: "Thesis & evidence", content: <Tab1Thesis snapshot={snapshot} manifest={manifest} /> },
               { id: "execution", kicker: "02", label: "Execution alpha", content: <Tab2Execution snapshot={snapshot} manifest={manifest} /> },
               { id: "supply", kicker: "03", label: "Supply physics", content: <Tab3Supply snapshot={snapshot} manifest={manifest} /> },
               { id: "sotp", kicker: "04", label: "SOTP & Monte Carlo", content: <Tab4Sotp snapshot={snapshot} manifest={manifest} /> },
-              { id: "bear", kicker: "05", label: "Bear case", content: <Tab5BearCase snapshot={snapshot} manifest={manifest} /> },
-              { id: "history", kicker: "06", label: "History", content: <Tab6History history={history} snapshot={snapshot} schedules={schedules} /> },
+              { id: "bear", kicker: "05", label: "Bear case", badge: typeof snapshot.bear_case?.triggers_breached === "number" ? <NavCount tone={snapshot.bear_case.triggers_breached > 0 ? "crimson" : "neutral"} title="Falsification triggers breached / graded">{snapshot.bear_case.triggers_breached}/{snapshot.bear_case.triggers_evaluated ?? "?"}</NavCount> : undefined, content: <Tab5BearCase snapshot={snapshot} manifest={manifest} /> },
+              { id: "history", kicker: "06", label: "History", badge: history.summary ? <NavCount title="Canonical daily snapshots recorded">{history.summary.snapshots.n_records}</NavCount> : undefined, content: <Tab6History history={history} snapshot={snapshot} schedules={schedules} /> },
             ]}
           />
         ) : (
