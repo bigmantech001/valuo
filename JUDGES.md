@@ -28,6 +28,7 @@ Faster smoke run that never touches the committed files: `make reproduce-fast` (
 | Same check, in your browser | Open `/terminal?verify=rehash`. The drawer re-hashes every stored payload with `crypto.subtle` and reports "N of N payloads match". |
 | The source still says what we recorded | In the same drawer, "Fetch live and compare" re-issues a recorded GET or NEAR RPC request and lists the fields that changed since the snapshot. |
 | Quote race history | `make history-verify` re-hashes every payload saved by the hourly quote races in `artifacts/history/raw/`. |
+| The snapshot existed at a NEAR block and was not edited after | Each daily snapshot's hashes are written to NEAR mainnet (SocialDB, `social.near`) by account `0161aff765e5412f3d3cac430933fb44325b5b012cf525410a9c7d1fa2fa81f0`. `make anchor-verify ANCHOR=0161aff765e5412f3d3cac430933fb44325b5b012cf525410a9c7d1fa2fa81f0` reads them back over public RPC (no key) and compares them with your checkout's `manifest.json`, printing the block the hashes were written at. `make anchor-list ANCHOR=...` lists every anchored snapshot. First anchor: tx [`6ZPRJLh8...`](https://nearblocks.io/txns/6ZPRJLh8mCBTBZXquqA4WFP5mL384u3z3dbNqXt5vwhk), block 223,914,397. |
 
 ## 3. Claim-by-claim verification
 
