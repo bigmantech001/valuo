@@ -857,7 +857,38 @@ def _cartel_status_word(snap: Snapshot) -> str:
     return st.replace("_", " ")
 
 
+def _confidential_boundary_sentence(snap: Snapshot) -> str:
+    """What the confidential treasury on intents.near shows on-chain (TVL, flows), or '' when not audited."""
+    b = getattr(snap.intents_forensics, "confidential_boundary", None) or {}
+    if not isinstance(b, dict) or _finite(b.get("tvl_usd")) is None:
+        return ""
+    vol = snap.intents_forensics.volume or {}
+    acct = str(b.get("treasury_account") or "")
+    parts = [
+        f" On-chain cross-check: the Confidential Intents treasury (`{acct[:8]}...{acct[-6:]}` in `intents.near`) holds "
+        f"{fmt_usd(b.get('tvl_usd'))} at block {fmt_num(b.get('block_height'), 0)} ({b.get('n_tokens')} tokens, "
+        f"{b.get('n_tokens_unpriced_nonzero')} unpriced)"
+    ]
+    if _finite(b.get("net_flow_30d_usd")) is not None:
+        parts.append(f"; net 30-day boundary flow {fmt_usd(b.get('net_flow_30d_usd'))} at today's prices")
+    ratio = _finite(vol.get("confidential_boundary_inflow_ratio_24h"))
+    if _finite(b.get("flow_24h_in_lower_bound_usd")) is not None:
+        parts.append(
+            f"; over 24h at least {fmt_usd(b.get('flow_24h_in_lower_bound_usd'))} entered and {fmt_usd(b.get('flow_24h_out_lower_bound_usd'))} left "
+            f"(hourly snapshots, lower bounds)" + (f", an inflow of {fmt_pct(ratio, 1)} of 24h volume" if ratio is not None else "")
+        )
+    parts.append(
+        ". Confidential swaps settle on a private chain whose RPC needs authentication, so swap volume itself cannot be read; "
+        "boundary inflow is a proxy, not the share (it nets same-hour flows and includes solver inventory)."
+    )
+    return "".join(parts)
+
+
 def _confidential_status_sentence(snap: Snapshot) -> str:
+    return _confidential_status_core(snap) + _confidential_boundary_sentence(snap)
+
+
+def _confidential_status_core(snap: Snapshot) -> str:
     vol = snap.intents_forensics.volume or {}
     cal = snap.sotp.calibration or {}
     status = vol.get("confidential_share_status") or ("measured" if _finite(vol.get("confidential_share_30d")) is not None else "unavailable")

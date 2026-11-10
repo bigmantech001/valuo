@@ -455,11 +455,17 @@ def build_evidence_scorecard(
         ))
     tvl_status = forensics.confidential_tvl_source_status or ("verified" if forensics.confidential_tvl_verified else "unknown")
     tvl_ok = isinstance(forensics.confidential_tvl_usd, (int, float)) and forensics.confidential_tvl_usd > 0
+    onchain_tvl = tvl_status == "onchain_measured"
+    reported_tvl = getattr(forensics, "confidential_tvl_reported_usd", None)
     claims.append(_claim(
         "Confidential TVL backs the dark-pool engine (Engine 2)",
-        ("VERIFIED_LIVE_API" if forensics.confidential_tvl_verified else "ASSUMPTION") if tvl_ok else "NOT_SUPPORTED",
-        f"{fmt_usd(forensics.confidential_tvl_usd)} TVL, nearstats sourceStatus = {tvl_status}",
-        f"{_record_ref(ledger, 'nearstats', 'summary')} intents.protocolMetrics.confidentialTvlObservation", "low",
+        ("VERIFIED_ON_CHAIN" if onchain_tvl else "VERIFIED_LIVE_API" if forensics.confidential_tvl_verified else "ASSUMPTION") if tvl_ok else "NOT_SUPPORTED",
+        (f"{fmt_usd(forensics.confidential_tvl_usd)} TVL read on-chain from the Confidential Intents treasury in intents.near"
+         + (f" (NEAR-reported via nearstats: {fmt_usd(reported_tvl)})" if isinstance(reported_tvl, (int, float)) else "")
+         if onchain_tvl else f"{fmt_usd(forensics.confidential_tvl_usd)} TVL, nearstats sourceStatus = {tvl_status}"),
+        (f"{_record_ref(ledger, 'near_rpc', 'confidential:balances:head')} intents.near mt_batch_balance_of (treasury)"
+         if onchain_tvl else f"{_record_ref(ledger, 'nearstats', 'summary')} intents.protocolMetrics.confidentialTvlObservation"),
+        "high" if onchain_tvl else "low",
         f"Engine 2 is flagged assumption_heavy and its terminal multiple carries the confidential_multiple_haircut "
         f"({assumptions.get('confidential_multiple_haircut').value:g}); the confidential take ({assumptions.get('confidential_take_bps').value:g} bps) is an assumption",
     ))
