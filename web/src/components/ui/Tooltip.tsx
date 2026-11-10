@@ -28,8 +28,9 @@ export function Tooltip({ content, children, side = "top", wide = false, classNa
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none invisible absolute z-50 rounded-md border border-border bg-surface px-3 py-2.5 text-left text-[12.5px] font-normal normal-case leading-snug tracking-normal text-ink opacity-0 shadow-[0_8px_24px_rgba(22,21,15,0.12)] transition-opacity",
-          "group-hover/tt:visible group-hover/tt:opacity-100 group-focus-within/tt:visible group-focus-within/tt:opacity-100",
+          "pointer-events-none absolute z-50 hidden rounded-md border border-border bg-surface px-3 py-2.5 text-left text-[12.5px] font-normal normal-case leading-snug tracking-normal text-ink shadow-[0_8px_24px_rgba(22,21,15,0.12)]",
+          // display:none until hover/focus, so a closed tooltip never widens the page on small screens
+          "group-hover/tt:block group-focus-within/tt:block",
           wide ? "w-[24rem] max-w-[90vw]" : "w-max max-w-[20rem]",
           SIDE[side],
         )}
