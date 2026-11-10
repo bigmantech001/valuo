@@ -72,7 +72,7 @@ export function ActorAudit({ f, cartelTrigger = null }: ActorAuditProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
         <Card
           kicker="Context only; not a solver measure"
           title="Who deposits into and calls the contract"
@@ -166,7 +166,7 @@ export function ActorAudit({ f, cartelTrigger = null }: ActorAuditProps) {
         </Card>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-3">
         <Card
           className="lg:col-span-2"
           title="Sample size and coverage"

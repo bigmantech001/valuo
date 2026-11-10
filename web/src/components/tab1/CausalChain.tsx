@@ -15,7 +15,7 @@ function times(v: number | null | undefined, decimals = 1): string {
 
 function Step({ n, title, claim, items, empty }: { n: number; title: string; claim: ReactNode; items: FigureItem[]; empty?: ReactNode }) {
   return (
-    <li className="grid gap-x-10 gap-y-4 border-t border-border py-7 first:border-t-0 first:pt-2 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+    <li className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-4 border-t border-border py-7 first:border-t-0 first:pt-2 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
       <div className="flex gap-4">
         <span aria-hidden className="tnum mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-strong text-[13px] text-muted">
           {n}

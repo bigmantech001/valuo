@@ -58,7 +58,7 @@ export function EvidenceScorecard({ snapshot, manifest, className }: { snapshot:
             {claims.map((claim, i) => {
               const records = resolveRefs(claim.source ?? "", index);
               return (
-                <li key={`${i}-${claim.claim}`} className="grid gap-x-6 gap-y-2 px-5 py-4 lg:grid-cols-[11rem_minmax(0,1.25fr)_minmax(0,1fr)_9rem]">
+                <li key={`${i}-${claim.claim}`} className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-2 px-5 py-4 lg:grid-cols-[11rem_minmax(0,1.25fr)_minmax(0,1fr)_9rem]">
                   <div>
                     <EvidenceBadge status={claim.status} />
                   </div>

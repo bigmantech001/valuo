@@ -92,7 +92,7 @@ export function BearPreview({ data }: { data: LandingData }) {
           const reason = status === "inconclusive" ? inconclusiveReason(s) : null;
           const width = Math.min(100, (Math.abs(s.drawdownPct) / maxDd) * 100);
           return (
-            <div key={s.key} className="grid gap-x-10 gap-y-4 border-b border-border py-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_10rem] lg:items-center">
+            <div key={s.key} className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-4 border-b border-border py-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_10rem] lg:items-center">
               <div className="min-w-0">
                 <h3 className="font-serif text-[20px] font-medium leading-snug text-ink">{s.title}</h3>
                 <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted">
@@ -121,7 +121,7 @@ export function BearPreview({ data }: { data: LandingData }) {
             </div>
           );
         })}
-        <div className="grid gap-x-10 gap-y-4 border-b border-border-strong py-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_10rem] lg:items-center">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-4 border-b border-border-strong py-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_10rem] lg:items-center">
           <div>
             <h3 className="font-serif text-[20px] font-medium text-ink">All {n === 1 ? "scenarios" : word(n).toLowerCase()} at once</h3>
           </div>

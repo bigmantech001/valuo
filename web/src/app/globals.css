@@ -137,3 +137,10 @@ input[type="range"].valuo-range:focus-visible::-webkit-slider-thumb {
     background: #fff;
   }
 }
+
+/* Long identifiers in prose (field paths, URLs, hashes) wrap instead of widening the page on phones. */
+p code,
+li code,
+td code {
+  overflow-wrap: anywhere;
+}

@@ -429,7 +429,7 @@ export function Findings({ data }: { data: LandingData }) {
 
       <ol className="mt-14 border-t border-border-strong">
         {findings.map((f, i) => (
-          <li key={f.key} className="grid gap-x-10 gap-y-6 border-b border-border py-10 lg:grid-cols-[3rem_minmax(0,1fr)_17rem]">
+          <li key={f.key} className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-6 border-b border-border py-10 lg:grid-cols-[3rem_minmax(0,1fr)_17rem]">
             <div className="tnum font-serif text-[22px] leading-none text-dim">{String(i + 1).padStart(2, "0")}</div>
             <div className="min-w-0 max-w-3xl">
               <h3 className="font-serif text-[24px] font-medium leading-[1.3] text-ink sm:text-[26px]">{f.claim}</h3>
@@ -444,7 +444,7 @@ export function Findings({ data }: { data: LandingData }) {
                 </TextLink>
               </div>
             </div>
-            <dl className="grid content-start gap-5 sm:grid-cols-2 lg:grid-cols-1 lg:border-l lg:border-border lg:pl-8">
+            <dl className="grid grid-cols-[minmax(0,1fr)] content-start gap-5 sm:grid-cols-2 lg:grid-cols-1 lg:border-l lg:border-border lg:pl-8">
               {f.figures.map((k) => (
                 <div key={k.label}>
                   <dt className="text-[13px] text-muted">{k.label}</dt>

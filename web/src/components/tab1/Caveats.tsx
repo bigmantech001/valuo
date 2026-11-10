@@ -38,7 +38,7 @@ export function Caveats({ snapshot, manifest, className }: { snapshot: Snapshot;
   return (
     <section id="caveats" className={cn("space-y-4", className)}>
       <SubHead title="Caveats">{lede}</SubHead>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0">
           <h4 className="mb-2 text-[14px] font-medium text-ink">
             Pipeline warnings <span className="tnum font-normal text-dim">({fmtInt(warnings.length)})</span>

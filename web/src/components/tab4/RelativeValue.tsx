@@ -195,7 +195,7 @@ export function RelativeValue({ data }: { data: RelativeValueData | null | undef
       {st ? (
         <div className="space-y-3">
           <h4 className="font-serif text-[19px] font-medium text-ink">Staking and the security budget</h4>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
             <Panel className="px-5 py-1">
               <FigureList items={stakingItems} />
             </Panel>

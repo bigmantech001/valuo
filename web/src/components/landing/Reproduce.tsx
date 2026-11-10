@@ -54,7 +54,7 @@ export function Reproduce({ data }: { data: LandingData | null }) {
           </pre>
           <dl className="mt-6 space-y-2 text-[14.5px] leading-relaxed">
             {COMMANDS.map((c) => (
-              <div key={c.cmd} className="grid gap-x-6 sm:grid-cols-[9rem_minmax(0,1fr)]">
+              <div key={c.cmd} className="grid grid-cols-[minmax(0,1fr)] gap-x-6 sm:grid-cols-[9rem_minmax(0,1fr)]">
                 <dt className="font-mono text-[13px] text-ink">{c.cmd}</dt>
                 <dd className="text-muted">{c.note.charAt(0).toUpperCase() + c.note.slice(1)}.</dd>
               </div>
@@ -103,7 +103,7 @@ export function Reproduce({ data }: { data: LandingData | null }) {
             {data.warnings.map((w, i) => {
               const { module, text } = splitWarning(w, corridors);
               return (
-                <li key={i} className="grid gap-x-6 gap-y-1 py-3 text-[14px] leading-relaxed sm:grid-cols-[11rem_minmax(0,1fr)]">
+                <li key={i} className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-1 py-3 text-[14px] leading-relaxed sm:grid-cols-[11rem_minmax(0,1fr)]">
                   <span className="text-ink">{module ?? "Pipeline"}</span>
                   <span className="min-w-0 break-words text-muted">{text}</span>
                 </li>

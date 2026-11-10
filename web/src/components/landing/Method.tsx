@@ -126,7 +126,7 @@ export function Method({ data }: { data: LandingData | null }) {
           <h3 className="font-serif text-[22px] font-medium text-ink">Reproducibility</h3>
           <dl className="mt-5 divide-y divide-border border-y border-border">
             {facts.map((f) => (
-              <div key={f.k} className="grid gap-1 py-3.5 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-6">
+              <div key={f.k} className="grid grid-cols-[minmax(0,1fr)] gap-1 py-3.5 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-6">
                 <dt className="text-[14px] font-medium text-ink">{f.k}</dt>
                 <dd className="text-[14.5px] leading-relaxed text-muted">{f.v}</dd>
               </div>
