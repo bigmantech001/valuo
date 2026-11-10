@@ -121,6 +121,9 @@ def test_publish_signs_what_it_sends(manifest_file: Path, tmp_path: Path, monkey
     sent: dict = {}
 
     def fake_rpc(method, params, url=None):
+        if method == "query" and params["request_type"] == "call_function":
+            reply = {"storage_balance_of": b"null", "storage_balance_bounds": b'{"min":"20000000000000000000000","max":null}'}[params["method_name"]]
+            return {"result": list(reply)}
         if method == "query":
             assert params["request_type"] == "view_access_key"
             return {"nonce": 41, "block_hash": anchor.b58encode(bytes(32))}
@@ -135,6 +138,8 @@ def test_publish_signs_what_it_sends(manifest_file: Path, tmp_path: Path, monkey
     assert out["ok"] and out["tx_hash"] == anchor.b58encode(hashlib.sha256(tx).digest())
     assert int.from_bytes(tx[4 + 10 + 33:4 + 10 + 41], "little") == 42          # nonce = access-key nonce + 1
     assert b'"valuo.near":{"valuo":{"snapshot":{"20261108T212423Z"' in tx
+    # first write: SocialDB minimum (0.02 NEAR) + the per-write 0.01 NEAR, as the last 16 bytes (u128 deposit)
+    assert int.from_bytes(tx[-16:], "little") == 2 * 10**22 + anchor.ANCHOR_DEPOSIT_YOCTO == int(out["deposit_yocto"])
 
 
 def test_load_key_rejects_mismatched_pair(tmp_path: Path):

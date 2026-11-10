@@ -245,14 +245,30 @@ def load_key(account: str, keydir: Path | None = None) -> tuple[bytes, bytes]:
     return secret[:32], pub
 
 
+def _social_view(method: str, args: dict[str, Any], url: str | None = None) -> Any:
+    res = _rpc("query", {"request_type": "call_function", "finality": "final", "account_id": SOCIAL_CONTRACT, "method_name": method,
+                         "args_base64": base64.b64encode(json.dumps(args).encode()).decode()}, url)
+    return json.loads(bytes(res["result"]).decode() or "null")
+
+
+def anchor_deposit(account: str, url: str | None = None) -> int:
+    """Deposit for this write: ANCHOR_DEPOSIT_YOCTO, plus SocialDB's minimum storage balance on the account's first write
+    (social.near panics with "attached deposit is less than the minimum storage balance" otherwise)."""
+    if _social_view("storage_balance_of", {"account_id": account}, url) is not None:
+        return ANCHOR_DEPOSIT_YOCTO
+    bounds = _social_view("storage_balance_bounds", {}, url) or {}
+    return int(bounds.get("min") or 0) + ANCHOR_DEPOSIT_YOCTO
+
+
 def publish(account: str, manifest_file: Path | None = None, *, url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
     """Sign and send the social.near `set` for the current manifest; returns the tx hash and final status."""
     seed, pub = load_key(account, keydir)
     args = json.dumps(set_args(account, manifest_file), separators=(",", ":")).encode()
+    deposit = anchor_deposit(account, url)
     ak = _rpc("query", {"request_type": "view_access_key", "finality": "final", "account_id": account,
                         "public_key": "ed25519:" + b58encode(pub)}, url)
     tx = borsh_function_call_tx(account, pub, int(ak["nonce"]) + 1, SOCIAL_CONTRACT, b58decode(ak["block_hash"]),
-                                "set", args, ANCHOR_GAS, ANCHOR_DEPOSIT_YOCTO)
+                                "set", args, ANCHOR_GAS, deposit)
     digest = hashlib.sha256(tx).digest()
     sig = ed25519_sign(seed, digest)
     if not ed25519_verify(pub, digest, sig):
@@ -261,7 +277,7 @@ def publish(account: str, manifest_file: Path | None = None, *, url: str | None 
     res = _rpc("send_tx", {"signed_tx_base64": signed, "wait_until": "FINAL"}, url)
     outcome = res.get("status") or (res.get("transaction_outcome") or {}).get("outcome", {}).get("status")
     failure = outcome.get("Failure") if isinstance(outcome, dict) else None
-    return {"tx_hash": b58encode(digest), "ok": failure is None, "status": outcome, "failure": failure,
+    return {"tx_hash": b58encode(digest), "ok": failure is None, "status": outcome, "failure": failure, "deposit_yocto": str(deposit),
             "explorer": f"https://nearblocks.io/txns/{b58encode(digest)}"}
 
 
