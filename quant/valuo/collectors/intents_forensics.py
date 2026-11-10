@@ -1398,6 +1398,7 @@ def extract_protocol_metrics(summary: Any, warnings: list[str] | None = None) ->
         return {
             "confidential_tvl_usd": None, "confidential_tvl_verified": False, "confidential_tvl_source_status": None,
             "unique_users_7d": None, "cumulative_fees_nearstats_usd": None, "confidential_tvl_warnings": [],
+            "confidential_tvl_history": [],
         }
     status = _get(pm, "confidentialTvlObservation", "sourceStatus")
     tvl_warnings = _get(pm, "confidentialTvlObservation", "warnings")
@@ -1408,7 +1409,19 @@ def extract_protocol_metrics(summary: Any, warnings: list[str] | None = None) ->
         "confidential_tvl_warnings": [w for w in tvl_warnings if isinstance(w, str)] if isinstance(tvl_warnings, list) else [],
         "unique_users_7d": _int(pm.get("uniqueUsers7d")),
         "cumulative_fees_nearstats_usd": _num(pm.get("totalGeneratedFeesUsd")),
+        "confidential_tvl_history": confidential_tvl_history(pm),
     }
+
+
+def confidential_tvl_history(pm: Any) -> list[list[Any]]:
+    """[[YYYY-MM-DD, usd], ...] from nearstats confidentialTvlObservation.history (NEAR-reported daily values), oldest first."""
+    hist = _get(pm, "confidentialTvlObservation", "history")
+    out = []
+    for h in hist if isinstance(hist, list) else []:
+        d, v = (h.get("observedAt"), _num(h.get("valueUsd"))) if isinstance(h, Mapping) else (None, None)
+        if isinstance(d, str) and v is not None:
+            out.append([d[:10], v])
+    return sorted(out)
 
 
 def apply_onchain_tvl(metrics: dict[str, Any], boundary: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -1940,6 +1953,7 @@ def _assemble(
         confidential_tvl_reported_usd=metrics.get("confidential_tvl_reported_usd"),
         confidential_tvl_reported_status=metrics.get("confidential_tvl_reported_status"),
         confidential_boundary=dict(boundary) if boundary else None,
+        confidential_tvl_history=metrics.get("confidential_tvl_history") or [],
         top_swaps=extract_top_swaps(summary),
         solver_concentration=solvers,
         caller_sample={
