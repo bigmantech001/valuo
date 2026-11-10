@@ -948,8 +948,9 @@ async def collect_execution_bench(
                     if not tokens.has(asset_id):
                         ledger.warn(f"execution_bench: {asset_id} ({corridor.corridor_id}) is absent from the live 1Click token list; quote attempted anyway")
         remaining = max(1.0, budget_s - (time.perf_counter() - started))
-        quotes = await _quote_matrix(
-            client, ledger, corridors, clips, tokens, budget_s=remaining, concurrency=concurrency, request_timeout_s=request_timeout_s
+        quotes, confidential = await asyncio.gather(
+            _quote_matrix(client, ledger, corridors, clips, tokens, budget_s=remaining, concurrency=concurrency, request_timeout_s=request_timeout_s),
+            confidential_premium(client, ledger, corridors, timeout_s=request_timeout_s),
         )
     finally:
         if own_client:
@@ -995,7 +996,58 @@ async def collect_execution_bench(
         token_list_ok=tokens.ok, token_list_sha256=tokens.record_sha256,
         budget_s=budget_s, concurrency=concurrency, request_timeout_s=request_timeout_s,
         elapsed_s=round(time.perf_counter() - started, 3), n_quotes_ok=n_ok,
+        confidential_quote=confidential,
     )
+
+
+# ----------------------------------------------------------------------------- confidential premium
+CONFIDENTIAL_CLIP_USD = 50_000.0
+CONFIDENTIAL_CORRIDOR = "eth_usdc_sol_usdc"
+
+
+def premium_bps(public_out: Any, confidential_out: Any) -> float | None:
+    """How much less a confidential quote delivers than the public quote for the same input, in bps of the public output."""
+    try:
+        pub, conf = float(public_out), float(confidential_out)
+    except (TypeError, ValueError):
+        return None
+    return (pub - conf) / pub * 1e4 if pub > 0 else None
+
+
+async def confidential_premium(client: httpx.AsyncClient, ledger: ProvenanceLedger, corridors: Sequence[Corridor], *, timeout_s: float) -> dict[str, Any]:
+    """Public vs confidential 1Click dry quote on the same trade (cross-VM corridor, $50K).
+
+    1Click serves confidential quotes only to authenticated partners ("User authentication is required for
+    confidential intent quotes", verified 2026-11-10), so this runs only when ONECLICK_JWT is set; otherwise it
+    records why it was skipped and the model keeps the labelled confidential_take_bps assumption."""
+    out: dict[str, Any] = {"corridor_id": CONFIDENTIAL_CORRIDOR, "clip_usd": CONFIDENTIAL_CLIP_USD, "status": "skipped_no_key",
+                           "premium_bps": None, "reason": "1Click confidential quotes require partner authentication (ONECLICK_JWT); not set"}
+    if not config.ONECLICK_JWT:
+        return out
+    corridor = next((c for c in corridors if c.corridor_id == CONFIDENTIAL_CORRIDOR), None)
+    if corridor is None:
+        out.update(status="skipped", reason=f"corridor {CONFIDENTIAL_CORRIDOR} not in this run")
+        return out
+    amount = str(int(CONFIDENTIAL_CLIP_USD * 10 ** int(corridor.origin.get("decimals", 6))))
+    deadline = (datetime.now(timezone.utc) + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    url = f"{config.ONECLICK_API_BASE}/v0/quote"
+    base = oneclick_payload(corridor, amount, deadline)
+    (pub, _), (conf, rec) = await asyncio.gather(
+        fetch_json(client, ledger, source="oneclick", name="quote:confidential_check:public", method="POST", url=url, json=base,
+                   headers=config.oneclick_headers(), timeout=timeout_s),
+        fetch_json(client, ledger, source="oneclick", name="quote:confidential_check:advanced", method="POST", url=url,
+                   json={**base, "confidentiality": "advanced"}, headers=config.oneclick_headers(), timeout=timeout_s),
+    )
+    pq, cq = (pub or {}).get("quote") if isinstance(pub, dict) else None, (conf or {}).get("quote") if isinstance(conf, dict) else None
+    if not isinstance(pq, dict) or not isinstance(cq, dict):
+        msg = conf.get("message") if isinstance(conf, dict) else None
+        out.update(status="error", reason=f"no confidential quote: {msg or rec.error or 'unparseable response'}")
+        ledger.warn(f"execution_bench: confidential quote check failed ({out['reason']})")
+        return out
+    out.update(status="measured", reason=None, public_amount_out=pq.get("amountOut"), confidential_amount_out=cq.get("amountOut"),
+               public_time_s=pq.get("timeEstimate"), confidential_time_s=cq.get("timeEstimate"),
+               premium_bps=premium_bps(pq.get("amountOut"), cq.get("amountOut")))
+    return out
 
 
 # ----------------------------------------------------------------------------- CLI

@@ -591,3 +591,19 @@ def test_live_cross_vm_500_returns_executable_quotes(ledger: ProvenanceLedger):
         assert -50 < (quote.friction_bps_raw if quote.friction_bps_raw is not None else quote.friction_bps_usd) < 500
     assert bench.oneclick_1y_token_universe is None or bench.oneclick_1y_token_universe > 50
     assert ledger.get("oneclick", "tokens") is not None
+
+
+# ---------------------------------------------------------------------- confidential premium (optional, needs ONECLICK_JWT)
+def test_premium_bps_math():
+    from valuo.collectors.execution_bench import premium_bps
+    assert premium_bps("1000000", "998000") == pytest.approx(20.0)
+    assert premium_bps("0", "1") is None and premium_bps(None, "1") is None
+
+
+def test_confidential_premium_skips_without_key(monkeypatch):
+    import asyncio
+    from valuo import config as cfg
+    from valuo.collectors import execution_bench as eb
+    monkeypatch.setattr(cfg, "ONECLICK_JWT", None)
+    out = asyncio.run(eb.confidential_premium(None, None, list(eb.CORRIDORS.values()) if isinstance(eb.CORRIDORS, dict) else eb.CORRIDORS, timeout_s=1))
+    assert out["status"] == "skipped_no_key" and out["premium_bps"] is None

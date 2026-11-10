@@ -729,6 +729,15 @@ def build_inputs(
     fees_30d = _fees_30d(forensics, v_total_30d)
     alpha, alpha_source = _capture_ratio(forensics, fees_30d, reg)
     tau_conf0 = A.value("confidential_take_bps", reg)
+    tau_conf_source = "assumption: registry confidential_take_bps (1Click confidential quotes need partner authentication)"
+    conf_q = getattr(bench, "confidential_quote", None) if bench is not None else None
+    prem = _num(conf_q or {}, "premium_bps") if isinstance(conf_q, dict) and conf_q.get("status") == "measured" else None
+    if prem is not None and v_total_30d > 0:
+        # Measured: what a confidential quote costs over the public quote on the same trade, added to the blended
+        # gross take NEAR Intents earns today (DefiLlama fees / volume).
+        tau_conf0 = max(0.0, fees_30d / v_total_30d * 1e4 + prem)
+        tau_conf_source = (f"measured: blended gross take {fees_30d / v_total_30d * 1e4:.2f} bps + live confidential premium {prem:.2f} bps "
+                           "(1Click dry quotes, same trade, public vs confidentiality=advanced)")
 
     # Reconcile the public take so month-0 modelled fees equal DefiLlama's 30d fees.
     blended_gross_bps = fees_30d / v_total_30d * 1e4 if v_total_30d > 0 else 0.0
@@ -875,6 +884,7 @@ def build_inputs(
         "current_fdv_nearstats_gap_pct": ((fdv_nearstats / fdv_now - 1.0) * 100.0) if (fdv_nearstats and fdv_now) else None,
         "tau_pub_start_bps": tau_pub0, "tau_pub_start_method": tau_pub_method,
         "tau_conf_start_bps": tau_conf0,
+        "tau_conf_source": tau_conf_source,
         "net_take_start_bps": blended_gross_bps * alpha,
         "alpha_capture": alpha, "alpha_source": alpha_source,
         "tau_floor_bps": floor, "tau_floor_source": floor_assumption.source, **floor_meta,
