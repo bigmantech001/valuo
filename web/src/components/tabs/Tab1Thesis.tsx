@@ -1,4 +1,4 @@
-import { CausalChain, Caveats, EngineWaterfall, EvidenceScorecard, MarketImpliedOpening, VerdictBanner } from "@/components/tab1";
+import { BullCaseScorecard, CausalChain, Caveats, EngineWaterfall, EvidenceScorecard, MarketImpliedOpening, VerdictBanner } from "@/components/tab1";
 import type { TabProps } from "./types";
 
 /**
@@ -19,6 +19,7 @@ export function Tab1Thesis({ snapshot, manifest }: TabProps) {
   const hasMarketImplied = Boolean(snapshot.market_implied?.solves?.length);
   return (
     <div className="space-y-16">
+      <BullCaseScorecard snapshot={snapshot} />
       {hasMarketImplied ? <MarketImpliedOpening snapshot={snapshot} /> : null}
       <VerdictBanner snapshot={snapshot} lead={!hasMarketImplied} />
       <CausalChain snapshot={snapshot} />

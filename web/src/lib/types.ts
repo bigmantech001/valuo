@@ -1356,6 +1356,47 @@ export interface Snapshot {
   market_implied?: MarketImplied | null;
   sensitivity?: Sensitivity | null;
   relative_value?: RelativeValue | null;
+  // bull_case.py: the long-term case as falsifiable conditions graded against live data.
+  bull_case?: BullCase | null;
+}
+
+// --------------------------------------------------------------------------- bull case (bull_case.py)
+export type BullStatus = "on_track" | "behind" | "against" | "not_measured";
+export type BullUnit = "ratio_yoy" | "ratio" | "usd_per_year" | "usd_per_day" | "usd" | "bps" | "x" | "hhi";
+
+export interface BullTrend {
+  label: string;
+  now: number;
+  then: number;
+  change: number;
+  window: string;
+  source: string;
+  direction: "up" | "down" | "flat";
+}
+
+export interface BullCondition {
+  key: string;
+  statement: string;
+  kind: "requirement" | "supporting";
+  required: number | null;
+  live: number | null;
+  unit: BullUnit | string;
+  status: BullStatus;
+  why: string;
+  trend: BullTrend | null;
+  required_source: string;
+  live_source: string;
+}
+
+export interface BullCase {
+  basis: string;
+  current_fdv_usd: number | null;
+  conditions: BullCondition[];
+  counts: Record<BullStatus, number>;
+  n_conditions: number;
+  n_measured: number;
+  headline: string;
+  watch: string[];
 }
 
 // --------------------------------------------------------------------------- market-implied solves

@@ -63,7 +63,7 @@ export default async function TerminalPage() {
               </div>
             }
             tabs={[
-              { id: "thesis", kicker: "01", label: "Thesis & evidence", content: <Tab1Thesis snapshot={snapshot} manifest={manifest} /> },
+              { id: "thesis", kicker: "01", label: "Thesis & evidence", badge: snapshot.bull_case ? <NavCount title="Bull-case conditions on track / measured">{snapshot.bull_case.counts.on_track}/{snapshot.bull_case.n_measured}</NavCount> : undefined, content: <Tab1Thesis snapshot={snapshot} manifest={manifest} /> },
               { id: "execution", kicker: "02", label: "Execution alpha", content: <Tab2Execution snapshot={snapshot} manifest={manifest} /> },
               { id: "supply", kicker: "03", label: "Supply physics", content: <Tab3Supply snapshot={snapshot} manifest={manifest} /> },
               { id: "sotp", kicker: "04", label: "SOTP & Monte Carlo", content: <Tab4Sotp snapshot={snapshot} manifest={manifest} /> },

@@ -20,9 +20,9 @@ export function Hero({ data }: { data: LandingData | null }) {
         <div className="flex min-w-0 flex-col justify-center">
           <p className="text-[14px] text-muted">NEAR Hackathon 2026 &middot; Investment thesis track</p>
           <h1 className="mt-5 max-w-[18ch] font-serif text-[42px] font-medium leading-[1.06] tracking-tight text-ink sm:text-[54px] lg:text-[58px]">
-            What NEAR&apos;s market value requires, and what the data shows.
+            The long-term case for NEAR, made falsifiable.
           </h1>
-          <p className="mt-7 max-w-[38rem] text-[17px] leading-[1.65] text-muted">{data ? <Lede data={data} /> : <>Valuo measures NEAR&apos;s execution, supply and fee data from public endpoints and solves for what the market price assumes. Generate a snapshot to see the figures.</>}</p>
+          <p className="mt-7 max-w-[38rem] text-[17px] leading-[1.65] text-muted">{data ? <>{data.bullCase ? <BullLine bull={data.bullCase} /> : null}<Lede data={data} /></> : <>Valuo measures NEAR&apos;s execution, supply and fee data from public endpoints and solves for what the market price assumes. Generate a snapshot to see the figures.</>}</p>
           <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/terminal"
@@ -49,6 +49,20 @@ export function Hero({ data }: { data: LandingData | null }) {
 }
 
 const T = ({ children }: { children: ReactNode }) => <span className="tnum text-ink">{children}</span>;
+
+/** Opening clause from snapshot.bull_case: how many of the case's conditions hold today. */
+function BullLine({ bull }: { bull: NonNullable<LandingData["bullCase"]> }) {
+  return (
+    <>
+      Of the <T>{bull.measured}</T> conditions NEAR&apos;s long-term case needs, <T>{bull.onTrack}</T> are on track today,{" "}
+      <T>{bull.behind}</T> are behind and <T>{bull.against}</T> {bull.against === 1 ? "is" : "are"} against it (
+      <a href="/terminal#thesis" className="text-accent underline-offset-4 hover:underline">
+        scorecard
+      </a>
+      ).{" "}
+    </>
+  );
+}
 
 /**
  * The lede, assembled from market_implied and relative_value. Each clause is conditional on the

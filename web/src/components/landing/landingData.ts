@@ -254,6 +254,8 @@ export interface RelativeValueView {
 }
 
 export interface LandingData {
+  /** snapshot.bull_case counts (null on snapshots without it) */
+  bullCase: { onTrack: number; behind: number; against: number; measured: number } | null;
   generatedAtUtc: string;
   runtimeS: number;
   seed: number;
@@ -518,8 +520,11 @@ export function buildLandingData(snapshot: Snapshot, manifest: Manifest | null):
   }));
   const gradedCount = scenarios.filter((s) => s.breached !== null && s.evaluated !== false).length;
   const snapAny = snapshot as unknown as Record<string, unknown>;
+  const bull = snapshot.bull_case;
+  const bullCase = bull && bull.counts ? { onTrack: bull.counts.on_track, behind: bull.counts.behind, against: bull.counts.against, measured: bull.n_measured } : null;
 
   return {
+    bullCase,
     generatedAtUtc: snapshot.generated_at_utc,
     runtimeS: snapshot.runtime_s,
     seed: snapshot.seed,
