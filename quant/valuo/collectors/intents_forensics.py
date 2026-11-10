@@ -66,6 +66,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from valuo import assumptions as A
 from valuo import config
+from valuo.collectors.confidential_boundary import collect_confidential_boundary
 from valuo.provenance import ProvenanceLedger, fetch_json, utc_now_iso
 from valuo.schemas import CallerClass, CallerShare, IntentsForensics
 
@@ -1254,6 +1255,7 @@ def confidential_split_guard(
     *,
     floor: float | None = None,
     fallback_share: float | None = None,
+    boundary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Decide whether nearstats' public/confidential split is a measurement; fall back through a labelled chain if not.
 
@@ -1284,6 +1286,14 @@ def confidential_split_guard(
     floor = A.value("confidential_share_plausibility_floor") if floor is None else floor
     share = volume.get("confidential_share_30d")
     volume["confidential_share_30d_reported"] = share
+    proxy = boundary_inflow_ratio(boundary, volume)
+    volume.update(proxy)
+    proxy_step = {
+        "step": "onchain: confidential treasury inflow / (24h volume + inflow)", "value": proxy.get("confidential_boundary_inflow_ratio_24h"),
+        "result": ("cross-check only, not used as the share: hourly treasury snapshots undercount gross flow (same-hour shields and "
+                   "unshields net out) and overcount swap volume (solver inventory crosses the boundary too)"),
+        "source": "intents_forensics.confidential_boundary",
+    }
     chain: list[dict[str, Any]] = [{"step": "nearstats intents.totalsBreakdown", "value": share}]
     if share is None:
         volume.update({
@@ -1318,7 +1328,7 @@ def confidential_split_guard(
             "confidential_share_status": SPLIT_STATUS_MEASURED, "confidential_share_measured": True,
             "confidential_share_source": "measured: nearstats intents.totalsBreakdown confidential / total 30d",
             "confidential_share_reason": ["below_floor_uncorroborated"] if below else [],
-            "confidential_share_fallback_chain": chain,
+            "confidential_share_fallback_chain": chain + [proxy_step],
         })
         return volume
     fallback = A.get("confidential_share")
@@ -1334,6 +1344,7 @@ def confidential_split_guard(
         "confidential_share_fallback_chain": chain + [
             {"step": "cross-check in fetched payloads", "value": None,
              "result": "none: DefiLlama dexs and nearstats totals both report the NEAR total; privacyRoutes is a 100-row route sample, not a volume share"},
+            proxy_step,
             {"step": "assumption:confidential_share", "value": value, "low": fallback.low, "high": fallback.high, "source": "assumption"},
         ],
     })
@@ -1343,7 +1354,26 @@ def confidential_split_guard(
         f"public/confidential fields set to null (raw kept in volume.split_reported); confidential_share_30d = {value:.0%} from the "
         "registry assumption confidential_share (source=assumption)"
     )
+    r = proxy.get("confidential_boundary_inflow_ratio_24h")
+    if r is not None:
+        rel = "below" if r < fallback.low else ("above" if r > fallback.high else "inside")
+        warnings.append(
+            f"confidential share cross-check: on-chain treasury inflow over 24h was {_usd_txt(proxy.get('confidential_boundary_inflow_24h_usd'))}, "
+            f"{r:.1%} of 24h volume + inflow, {rel} the assumption's {fallback.low:.0%}-{fallback.high:.0%} range (assumed {value:.0%}). "
+            "A proxy, not a measurement of the share: hourly snapshots undercount gross flow and solver inventory inflates it"
+        )
     return volume
+
+
+def boundary_inflow_ratio(boundary: Mapping[str, Any] | None, volume: Mapping[str, Any]) -> dict[str, Any]:
+    """On-chain proxy for the confidential share: treasury inflow over 24h / (24h volume + that inflow).
+
+    The denominator adds the inflow so the ratio stays below 1 whether or not the 24h total already includes
+    confidential flow. Null when the boundary audit or the 24h volume is missing."""
+    b = boundary or {}
+    inflow, total = _num(b.get("flow_24h_in_lower_bound_usd")), _num(volume.get("24h"))
+    ratio = inflow / (total + inflow) if inflow is not None and total and total > 0 else None
+    return {"confidential_boundary_inflow_24h_usd": inflow, "confidential_boundary_inflow_ratio_24h": ratio}
 
 
 def _usd_txt(x: float | None) -> str:
@@ -1379,6 +1409,17 @@ def extract_protocol_metrics(summary: Any, warnings: list[str] | None = None) ->
         "unique_users_7d": _int(pm.get("uniqueUsers7d")),
         "cumulative_fees_nearstats_usd": _num(pm.get("totalGeneratedFeesUsd")),
     }
+
+
+def apply_onchain_tvl(metrics: dict[str, Any], boundary: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Prefer the treasury TVL read on-chain over the nearstats-reported figure; keep the reported one for audit."""
+    tvl = _num((boundary or {}).get("tvl_usd"))
+    out = dict(metrics)
+    out["confidential_tvl_reported_usd"] = metrics.get("confidential_tvl_usd")
+    out["confidential_tvl_reported_status"] = metrics.get("confidential_tvl_source_status")
+    if tvl is not None and tvl > 0:
+        out.update({"confidential_tvl_usd": tvl, "confidential_tvl_verified": True, "confidential_tvl_source_status": "onchain_measured"})
+    return out
 
 
 def extract_price(summary: Any, nearblocks_stats: Any, warnings: list[str] | None = None) -> dict[str, Any]:
@@ -1454,6 +1495,19 @@ def _llama_chart_points(parsed: Any) -> list[dict[str, float]]:
         if ts is not None and price is not None:
             out.append({"t": ts * 1e3, "c": price})
     return out
+
+
+async def _fetch_confidential_boundary(
+    client: httpx.AsyncClient, ledger: ProvenanceLedger, warnings: list[str], *, enabled: bool = True,
+) -> dict[str, Any] | None:
+    """Confidential treasury audit on NEAR mainnet (collectors.confidential_boundary); a failure is a warning, never fatal."""
+    if not enabled:
+        return None
+    try:
+        return await collect_confidential_boundary(client, ledger, warnings)
+    except Exception as e:  # noqa: BLE001 - one optional source must not abort the forensics collector
+        warnings.append(f"confidential boundary audit failed: {type(e).__name__}: {e}")
+        return None
 
 
 async def _fetch_nearstats(client: httpx.AsyncClient, ledger: ProvenanceLedger, warnings: list[str]) -> tuple[Any, Any, str]:
@@ -1797,10 +1851,12 @@ def _assemble(
     price_source: str = "nearstats:price-history",
     nearblocks_error: str | None = None,
     solver_sample: Mapping[str, Any] | None = None,
+    boundary: Mapping[str, Any] | None = None,
 ) -> IntentsForensics:
     volume = extract_volume(summary, llama.get("dexs"), warnings)
     metrics = extract_protocol_metrics(summary, warnings)
-    volume = confidential_split_guard(volume, summary, metrics, warnings)
+    metrics = apply_onchain_tvl(metrics, boundary)
+    volume = confidential_split_guard(volume, summary, metrics, warnings, boundary=boundary)
     price = extract_price(summary, stats, warnings)
     fees = fee_metrics(
         llama.get("fees"), llama.get("revenue"), llama.get("holders"), llama.get("dexs"),
@@ -1881,6 +1937,9 @@ def _assemble(
         nearstats_generated_at=_get(summary, "generatedAt"),
         confidential_tvl_source_status=metrics["confidential_tvl_source_status"],
         confidential_tvl_warnings=metrics["confidential_tvl_warnings"],
+        confidential_tvl_reported_usd=metrics.get("confidential_tvl_reported_usd"),
+        confidential_tvl_reported_status=metrics.get("confidential_tvl_reported_status"),
+        confidential_boundary=dict(boundary) if boundary else None,
         top_swaps=extract_top_swaps(summary),
         solver_concentration=solvers,
         caller_sample={
@@ -1925,8 +1984,9 @@ async def collect_intents_forensics_async(
     page_delay_s: float | None = None,
     solver_pages: int | None = None,
     solver_target_span_s: float | None = None,
+    confidential_boundary: bool = True,
 ) -> IntentsForensics:
-    """Fetch nearstats, DefiLlama and NearBlocks concurrently (NearBlocks pages sequential, spaced) and assemble.
+    """Fetch nearstats, DefiLlama, NearBlocks and the confidential treasury (NEAR RPC) concurrently (NearBlocks pages sequential, spaced) and assemble.
 
     ``solver_pages`` (default ``SOLVER_AUDIT_PAGES``: registry solver_sample_pages, env VALUO_NEARBLOCKS_SOLVER_PAGES)
     method-filtered execute_intents pages of ``SOLVER_AUDIT_PER_PAGE`` rows are fetched after the caller pages for the
@@ -1944,7 +2004,7 @@ async def collect_intents_forensics_async(
     own_client = client is None
     client = client or httpx.AsyncClient(follow_redirects=True, timeout=config.HTTP_TIMEOUT_S)
     try:
-        (summary, points, price_source), llama, (rows, pages_ok, lifetime, stats, nb_error) = await asyncio.gather(
+        (summary, points, price_source), llama, (rows, pages_ok, lifetime, stats, nb_error), boundary = await asyncio.gather(
             _fetch_nearstats(client, ledger, warnings),
             _fetch_defillama(client, ledger),
             _fetch_nearblocks(
@@ -1952,6 +2012,7 @@ async def collect_intents_forensics_async(
                 solver_pages=n_solver_pages, solver_out=solver_sample,
                 solver_target_span_s=SOLVER_SAMPLE_TARGET_SPAN_S if solver_target_span_s is None else float(solver_target_span_s),
             ),
+            _fetch_confidential_boundary(client, ledger, warnings, enabled=confidential_boundary),
         )
     finally:
         if own_client:
@@ -1960,7 +2021,7 @@ async def collect_intents_forensics_async(
         result = _assemble(
             summary=summary, price_points=points, llama=llama, rows=rows, pages_ok=pages_ok, pages_requested=nearblocks_pages,
             per_page=per_page, lifetime=lifetime, stats=stats, warnings=warnings, fetched_at=fetched_at,
-            price_source=price_source, nearblocks_error=nb_error, solver_sample=solver_sample,
+            price_source=price_source, nearblocks_error=nb_error, solver_sample=solver_sample, boundary=boundary,
         )
     finally:
         # Flushed even when assembly raises, so a fatal exit still carries the collector's diagnostics.

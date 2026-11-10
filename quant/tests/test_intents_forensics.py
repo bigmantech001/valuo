@@ -118,7 +118,7 @@ def _router(probes_dir: Path, *, drop_cursor: bool = False, fail: frozenset[str]
 def _collect(ledger: ProvenanceLedger, handler, **kwargs) -> IntentsForensics:
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await collect_intents_forensics_async(ledger, client=client, page_delay_s=0, **kwargs)
+            return await collect_intents_forensics_async(ledger, client=client, page_delay_s=0, **{"confidential_boundary": False, **kwargs})
 
     return asyncio.run(go())
 
@@ -644,7 +644,10 @@ def test_split_guard_rejects_collapsed_split_and_falls_back_to_assumption(load_f
     assert vol["split_reported"]["confidential30d"] == split["confidential"]["volume30dUsd"]
     assert vol["split_reported"]["public30d"] == split["public"]["volume30dUsd"]
     chain = vol["confidential_share_fallback_chain"]
-    assert [c["step"] for c in chain] == ["nearstats intents.totalsBreakdown", "cross-check in fetched payloads", "assumption:confidential_share"]
+    assert [c["step"] for c in chain] == [
+        "nearstats intents.totalsBreakdown", "cross-check in fetched payloads",
+        "onchain: confidential treasury inflow / (24h volume + inflow)", "assumption:confidential_share",
+    ]
     assert chain[-1]["source"] == "assumption"
     assert any(w.startswith("CONFIDENTIAL SPLIT IMPLAUSIBLE - NOT MEASURED") for w in warnings)
 
