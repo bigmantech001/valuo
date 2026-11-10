@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { DrawerChrome, DrawerHead, drawerPanelClass, useDrawer } from "./MobileDrawer";
 
 export interface TabDef {
   id: string;
@@ -77,17 +78,28 @@ export function Tabs({ tabs, defaultTabId, syncHash = true, onChange, className,
   };
 
   const [collapsed, setCollapsed] = useState(false);
+  const drawer = useDrawer();
   const panels = tabs.map((t) => (
-    <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={t.id !== active} className={variant === "sidebar" ? "pt-8 lg:pt-0" : "pt-8"}>
+    <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={t.id !== active} className={variant === "sidebar" ? "lg:pt-0" : "pt-8"}>
       {t.content}
     </div>
   ));
 
   if (variant === "sidebar") {
+    const current = tabs.find((t) => t.id === active);
+    const pick = (id: string) => {
+      select(id);
+      if (drawer.open) {
+        drawer.setOpen(false);
+        window.scrollTo({ top: 0 });
+      }
+    };
     return (
       <div className={cn("flex flex-col lg:grid lg:items-start lg:gap-8", collapsed ? "lg:grid-cols-[64px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]", className)}>
-        <nav aria-label="Terminal sections" className="min-w-0 lg:sticky lg:top-28">
-          <div className="rounded-xl border-border lg:border lg:bg-surface lg:p-2.5 lg:shadow-[0_1px_2px_rgba(22,21,15,0.04)]">
+        <DrawerChrome open={drawer.open} onClose={() => drawer.setOpen(false)} />
+        <nav id="terminal-sections" aria-label="Terminal sections" className={drawerPanelClass(drawer.open, "min-w-0 lg:sticky lg:top-28")}>
+          <DrawerHead title="Sections" open={drawer.open} onClose={() => drawer.setOpen(false)} />
+          <div className="lg:rounded-xl lg:border lg:border-border lg:bg-surface lg:p-2.5 lg:shadow-[0_1px_2px_rgba(22,21,15,0.04)]">
             <div className={cn("hidden items-center border-b border-border pb-2.5 pt-1 lg:flex", collapsed ? "justify-center" : "justify-between pl-2.5")}>
               {collapsed ? null : <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-dim">{railTitle}</span>}
               <button
@@ -100,7 +112,7 @@ export function Tabs({ tabs, defaultTabId, syncHash = true, onChange, className,
                 <span aria-hidden>{collapsed ? "\u203A" : "\u2039"}</span>
               </button>
             </div>
-            <div role="tablist" aria-label="Terminal sections" aria-orientation="vertical" className="valuo-scroll flex gap-1 overflow-x-auto border-b border-border lg:mt-2 lg:flex-col lg:overflow-visible lg:border-b-0">
+            <div role="tablist" aria-label="Terminal sections" aria-orientation="vertical" className="flex flex-col gap-1 lg:mt-2">
               {tabs.map((t, i) => {
                 const selected = t.id === active;
                 return (
@@ -116,15 +128,15 @@ export function Tabs({ tabs, defaultTabId, syncHash = true, onChange, className,
                     aria-controls={`panel-${t.id}`}
                     tabIndex={selected ? 0 : -1}
                     title={collapsed && typeof t.label === "string" ? t.label : undefined}
-                    onClick={() => select(t.id)}
+                    onClick={() => pick(t.id)}
                     onKeyDown={(e) => onKeyDown(e, i)}
                     className={cn(
-                      "group relative flex shrink-0 items-center gap-3 whitespace-nowrap px-3 py-3 text-[14.5px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:rounded-lg lg:py-2.5",
+                      "group relative flex min-h-11 shrink-0 items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2.5 text-[15px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-0 lg:text-[14.5px]",
                       collapsed && "lg:justify-center lg:px-0",
-                      selected ? "text-ink lg:bg-surface-2" : "text-muted hover:text-ink lg:hover:bg-surface-2/60",
+                      selected ? "bg-surface-2 text-ink" : "text-muted hover:bg-surface-2/60 hover:text-ink",
                     )}
                   >
-                    <span aria-hidden className={cn("absolute inset-x-0 -bottom-px h-[2px] lg:inset-x-auto lg:bottom-auto lg:left-0 lg:top-2 lg:h-[calc(100%-16px)] lg:w-[2px] lg:rounded-full", selected ? "bg-ink lg:bg-accent" : "bg-transparent")} />
+                    <span aria-hidden className={cn("absolute left-0 top-2 h-[calc(100%-16px)] w-[2px] rounded-full", selected ? "bg-accent" : "bg-transparent")} />
                     {t.kicker ? <span className={cn("tnum text-[12px]", selected ? "text-accent" : "text-dim")}>{t.kicker}</span> : null}
                     <span className={cn(collapsed && "lg:hidden")}>{t.label}</span>
                     {t.badge ? <span className={cn("ml-auto", collapsed && "lg:hidden")}>{t.badge}</span> : null}
@@ -132,10 +144,27 @@ export function Tabs({ tabs, defaultTabId, syncHash = true, onChange, className,
                 );
               })}
             </div>
-            {railFooter && !collapsed ? <div className="mt-2 hidden border-t border-border pt-2 lg:block">{railFooter}</div> : null}
+            {railFooter ? (
+              <div className={cn("mt-2 border-t border-border pt-2", collapsed && "lg:hidden")} onClick={() => drawer.setOpen(false)}>
+                {railFooter}
+              </div>
+            ) : null}
           </div>
         </nav>
-        <div className="min-w-0">{panels}</div>
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => drawer.setOpen(true)}
+            aria-controls="terminal-sections"
+            aria-expanded={drawer.open}
+            className="mb-6 flex min-h-11 w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 text-left lg:hidden"
+          >
+            {current?.kicker ? <span className="tnum text-[12px] text-accent">{current.kicker}</span> : null}
+            <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{current?.label}</span>
+            <span className="shrink-0 text-[13px] text-muted">All sections</span>
+          </button>
+          {panels}
+        </div>
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { readWorkflowSchedules, Tab6History } from "@/components/tab6";
 import { loadHistory } from "@/lib/history";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs } from "@/components/ui/Tabs";
+import { DrawerProvider } from "@/components/ui/MobileDrawer";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ function NavCount({ children, tone = "neutral", title }: { children: React.React
   );
 }
 
-const railLink = "flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] text-muted transition-colors hover:bg-surface-2/60 hover:text-ink";
+const railLink = "flex items-center gap-3 rounded-lg px-3 py-2 max-lg:min-h-11 max-lg:text-[15px] text-[13.5px] text-muted transition-colors hover:bg-surface-2/60 hover:text-ink";
 
 /**
  * /terminal - the six-tab Investment Committee terminal (tab 6 reads artifacts/history/summary.json).
@@ -39,8 +40,9 @@ export default async function TerminalPage() {
 
   return (
     <ManifestProvider manifest={manifest}>
+      <DrawerProvider>
       <ProvenanceBar snapshot={barSnapshot} manifest={manifest} initialIntegrity={integrity} />
-      <main className="mx-auto w-full max-w-none px-6 lg:px-[5vw] pb-24 pt-6">
+      <main className="mx-auto w-full max-w-none px-4 sm:px-6 lg:px-[5vw] pb-24 pt-5 lg:pt-6">
         {/* Page-level heading for screen-reader navigation; the visible brand lives in the provenance bar. */}
         <h1 className="sr-only">Valuo NEAR Investment Committee terminal</h1>
         {snapshot ? (
@@ -102,6 +104,7 @@ export default async function TerminalPage() {
           </p>
         </div>
       </footer>
+      </DrawerProvider>
     </ManifestProvider>
   );
 }
