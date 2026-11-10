@@ -1,5 +1,7 @@
 # QUANT_PIPELINE_SPEC.md — Reproducible Python Quant & Data Engine (`quant/`)
 
+> **Status: original pre-build brief (Oct 2026), kept for the record.** The implementation and its design decisions are in `docs/MODEL_DESIGN.md`; dated endpoint probes are in `docs/LIVE_ENDPOINT_FACTS.md`. Figures quoted below are pre-build examples, not results. Current values are in `artifacts/latest_snapshot.json`; where this brief and the artifacts disagree, the artifacts are right.
+
 ## 1. Design Philosophy for AI & VC Judges
 Every claim in **Valuo** must be **re-runnable from scratch with zero paid API keys** via `python -m valuo.reproduce`.
 - All raw HTTP/RPC responses are hashed with `hashlib.sha256` and recorded in `artifacts/manifest.json` alongside exact NEAR Mainnet `block_height`, `block_hash`, and UTC timestamp.
@@ -18,8 +20,8 @@ from pydantic import BaseModel
 FASTNEAR_RPC = "https://free.rpc.fastnear.com"
 
 TRACKED_STATE_SINKS = [
-    "intents.near",     # Defuse / NEAR Intents core clearinghouse (~12.96 GB = ~129,607 NEAR locked!)
-    "aurora",           # Aurora EVM engine state (~14.36 GB = ~143,577 NEAR locked)
+    "intents.near",     # Defuse / NEAR Intents core clearinghouse (live lock: near_rpc.tracked_sinks)
+    "aurora",           # Aurora EVM engine state (live lock: near_rpc.tracked_sinks)
     "wrap.near",        # Wrapped NEAR liquidity vault (~34.9M NEAR balance)
     "v1.signer",        # Chain Signatures MPC coordinator
     "escrow.ai.near",   # NEAR AI Cloud / Agent escrow settlement account
@@ -63,8 +65,8 @@ class NearOnchainTruth(BaseModel):
 
 This collector proves empirically **why NEAR Intents commands sustainable pricing power**. Query real executable quotes concurrently across **3 clip sizes (`$500`, `$50,000`, `$250,000`)** and **3 corridor archetypes**:
 1. **Cross-VM Flagship (`Ethereum USDC -> Solana USDC`):** `1Click` vs `Relay` vs `LI.FI` *(Note: `Across` is structurally incapable of non-EVM Solana settlement—record `supported=False` as empirical moat proof!)*.
-2. **Native Bitcoin Corridor (`Ethereum USDC -> Native BTC`):** `1Click` (`nep141:btc.omft.near`) vs `LI.FI` *(proving native BTC settlement without wrapped WBTC trust assumptions)*.
-3. **EVM L2 Commodity Corridor (`Base USDC -> Arbitrum USDC`):** `1Click` vs `Across` vs `Relay` vs `LI.FI` *(intellectual honesty: show where EVM-native bridges like Across compete tightly at `~1–2 bps`, proving why NEAR Intents' margin moat comes from Cross-VM + Native BTC/SOL/ZEC + Confidential Shard rather than EVM-L2 stablecoin swaps!)*.
+2. **Native Bitcoin Corridor (`Ethereum USDC -> Native BTC`):** `1Click` (`nep141:btc.omft.near`) vs `Relay` vs `LI.FI` *(native BTC settlement without wrapped-BTC trust assumptions; Across cannot route it)*.
+3. **EVM L2 Commodity Corridor (`Base USDC -> Arbitrum USDC`):** `1Click` vs `Across` vs `Relay` vs `LI.FI` *(intellectual honesty: show where EVM-native bridges like Across compete tightly at `~1–2 bps`, testing whether NEAR Intents' margin comes from cross-VM routes rather than EVM-L2 stablecoin swaps. Live result: 1Click leads on cross-VM and trails on EVM L2 and on native BTC, so the native-BTC moat claim is graded NOT_SUPPORTED)*.
 
 ### Verified Live Payloads (Tested & Working):
 
@@ -151,7 +153,7 @@ $$\Delta S_t = \underbrace{\frac{S_t \cdot i_t}{365.25}}_{\text{Epoch Validator 
 
 Where:
 - $i_t$: `0.025` (`2.5%` current protocol cap) vs. **SVRN Governance Glidepath** linearly stepping from `0.025` to `0.016` (`1.6%`) over 24 months (`730` days).
-- $V_{\text{pub}, t}, V_{\text{conf}, t}$: Daily Public Intents volume vs. **Confidential Intents Private Shard** volume (`$160M+` TVL dark pool).
+- $V_{\text{pub}, t}, V_{\text{conf}, t}$: Daily Public Intents volume vs. **Confidential Intents Private Shard** volume (confidential TVL: `intents_forensics.confidential_tvl_usd`).
 - $\tau_{\text{pub}}$: Empirically bounded by **Collector 2's** measured `PricingPowerHeadroom` (e.g. `4–12 bps` blended net fee).
 - $\tau_{\text{conf}}$: Institutional MEV-protected Confidential Shard fee (`15–25 bps`).
 - $\alpha_{\text{buyback}}$: Protocol/frontend net revenue share directed to open-market `$NEAR` buybacks (`~28%–35%` empirically observed on `revenue.near.org`, adjustable in UI).
@@ -172,7 +174,7 @@ Explicitly quantify **4 Falsification Scenarios** (with exact math showing impli
 1. **Aggregator Bypass / Fee Race to Zero:** Unauthenticated `25 bps` / partner `10–20 bps` fees compress to `1 pip` (`0.01 bps` base `intents.near` contract fee) because 3rd-party frontends bypass `near.com`.
 2. **Governance Stalemate (`2.5%` Forever):** Validators reject the `2.5% -> 1.6%` issuance reduction, leaving `~32.7M NEAR/year` gross issuance overhang.
 3. **Post-Incentive Volume Decay:** `NEAR@3.33` mercenary liquidity unwinds Confidential TVL by `-70%` and 30d volume drops `-60%`.
-4. **Solver Cartelization (`HHI > 3,500`):** Top 2 market makers capture `>80%` of solver fills, widening spreads untilLI.FI/Relay win order flow back.
+4. **Solver Cartelization (`HHI > 3,500`):** Top 2 market makers capture `>80%` of solver fills, widening spreads until LI.FI/Relay win order flow back.
 
 ---
 

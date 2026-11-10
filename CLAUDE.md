@@ -38,17 +38,19 @@ cp -r vendor/near-agent-skills/* .claude/skills/ 2>/dev/null || true
 
 ## 4. Verified Live Zero-Key Data Endpoints (Tested Oct 2026)
 
+The table lists what each endpoint returns, not current values; those live in `artifacts/latest_snapshot.json` (dated probe results: `docs/LIVE_ENDPOINT_FACTS.md`).
+
 Every endpoint below works **without paid API keys** out of the box (optional keys in `.env` only increase rate limits):
 
 | Data Layer | Live Endpoint | Verified Output |
 | :--- | :--- | :--- |
-| **NEAR Mainnet RPC (FastNEAR)** | `POST https://free.rpc.fastnear.com` | `block` (`total_supply` ~`1.3098B NEAR`, `gas_price`), `EXPERIMENTAL_protocol_config` (`max_inflation_rate: [1, 40]` = `2.5%`, `storage_amount_per_byte: 10^19`), `validators` (`392` validators, `~593.5M NEAR` staked), `query/view_account` (`intents.near` `12.96 GB` = `129,607 NEAR` state-locked!) |
+| **NEAR Mainnet RPC (FastNEAR)** | `POST https://free.rpc.fastnear.com` | `block` (`total_supply`, `gas_price`), `EXPERIMENTAL_protocol_config` (`max_inflation_rate: [1, 40]` = `2.5%`, `storage_amount_per_byte: 10^19`), `validators` (active set and stake), `query/view_account` (`intents.near` storage bytes -> state-locked NEAR). Live values: `artifacts/latest_snapshot.json` -> `near_rpc` |
 | **NEAR Intents 1Click Tokens** | `GET https://1click.chaindefuser.com/v0/tokens` | Live Defuse/Omni asset IDs (`nep141:...`), decimals, USD prices across BTC, SOL, ETH, Base, Arbitrum, NEAR, ZEC |
 | **NEAR Intents 1Click Quotes** | `POST https://1click.chaindefuser.com/v0/quote` (`"dry": true`) | Live executable solver quotes (`amountOut`, `amountOutUsd`, `timeEstimate`, `withdrawFee`) with no deposit address spam |
 | **Relay Competitor Quotes** | `POST https://api.relay.link/quote` | Live cross-chain solver quotes (`details.currencyOut.amountFormatted`, `details.timeEstimate`) across Ethereum (`1`), Base (`8453`), Arbitrum (`42161`), Solana (`792703809`) |
 | **LI.FI Competitor Quotes** | `GET https://li.quest/v1/quote` | Live aggregator quotes (`estimate.toAmount`, `estimate.executionDuration`, `tool`) across EVM + Solana + Bitcoin bridges |
 | **Across Competitor Quotes** | `GET https://app.across.to/api/suggested-fees` | Live EVM-only intent fees (`totalRelayFee.total`, `estimatedFillTimeSec`) showing Across's EVM speed vs. inability to route native BTC/SOL/NEAR/ZEC |
-| **NearStats Ecosystem API** | `GET https://nearstats.org/api/near/summary` & `/price-history` | Live 24h/7d/30d/all-time NEAR Intents swap volume (`$35.8B+`), chain/route breakdowns, historical `$NEAR` price series |
+| **NearStats Ecosystem API** | `GET https://nearstats.org/api/near/summary` & `/price-history` | Live 24h/7d/30d/all-time NEAR Intents swap volume (current value: `intents_forensics.volume`), chain/route breakdowns, historical `$NEAR` price series |
 | **NearBlocks On-Chain Txns** | `GET https://api.nearblocks.io/v1/account/intents.near/txns?per_page=25&page=1` | Live `intents.near` callers (`escrow.ai.near`, solver relayers, user wallets) + `/v1/stats` network telemetry |
 | **DefiLlama Fees & Comps** | `GET https://api.llama.fi/summary/fees/{slug}` & `/summary/dexs/near-intents` | Historical daily fees/revenue for `near-intents`, `near`, `solana`, `ethereum`, `hyperliquid` for live REV valuation multiples |
 
