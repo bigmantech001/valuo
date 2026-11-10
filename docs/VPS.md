@@ -68,7 +68,9 @@ SocialDB records the block each value was written at, so anyone can check, with 
    EOF
    chmod 600 ~/.near-credentials/mainnet/<account>.json
    ```
-3. Re-run setup with the account: `VALUO_ANCHOR_ACCOUNT=<account> bash ~/valuo/ops/vps/setup.sh`. It installs near-cli-rs and adds `VALUO_ANCHOR_ACCOUNT` to the crontab block.
+3. Re-run setup with the account: `VALUO_ANCHOR_ACCOUNT=<account> bash ~/valuo/ops/vps/setup.sh` (on a shared server, as root: `VALUO_ANCHOR_ACCOUNT=<account> bash /home/valuo/valuo/ops/vps/install-shared.sh`). It adds `VALUO_ANCHOR_ACCOUNT` to the crontab block.
+
+`python -m valuo.anchor publish` builds the `social.near` `set` transaction itself (Borsh), signs its SHA-256 with the account's ed25519 key through the system `openssl`, checks the signature locally and sends it over public RPC. No NEAR CLI or extra package is installed. An implicit account (64-hex id derived from the public key) works and needs no `.near` name: fund it and it exists.
 
 An anchoring failure (for example an empty balance) is logged and does not fail the run; that snapshot is simply not anchored.
 
