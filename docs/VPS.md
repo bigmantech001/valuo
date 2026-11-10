@@ -5,7 +5,7 @@ Valuo's time series (the terminal's History tab) grows from two jobs that run on
 | Job | Schedule (UTC) | What it does | Commits |
 | :--- | :--- | :--- | :--- |
 | `valuo-run.sh snapshot` | daily 06:05 | `make reproduce` (live mainnet, quote race, 10,000-path Monte Carlo), `make test`, append to `artifacts/history/` | `artifacts/`, README findings block |
-| `valuo-run.sh bench` | hourly at :17 | live 1Click / Relay / LI.FI / Across quote race, re-hash its raw payloads | `artifacts/history/` |
+| `valuo-run.sh bench` | hourly at :23 | live 1Click / Relay / LI.FI / Across quote race, re-hash its raw payloads | `artifacts/history/` |
 
 The schedule lives in `ops/vps/valuo.crontab`; the History tab reads it from there. Both jobs take one lock, so they never write `artifacts/` at the same time. No API keys are needed.
 
@@ -38,6 +38,16 @@ The schedule lives in `ops/vps/valuo.crontab`; the History tab reads it from the
    ~/valuo/ops/vps/valuo-run.sh snapshot
    tail -n 40 ~/valuo-logs/$(date -u +%F)-snapshot.log
    ```
+
+## Shared server (other services running)
+
+On a server that already runs other workloads, install without `apt` and without giving the jobs root:
+
+1. As root: `useradd -m -s /bin/bash valuo`.
+2. As `valuo`: create the deploy key (step 1 above), install uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`), `git clone git@github.com:bigmantech001/valuo.git ~/valuo`, `make -C ~/valuo sync`.
+3. As root: `bash /home/valuo/valuo/ops/vps/install-shared.sh`.
+
+`install-shared.sh` only appends a marked block to root's crontab. Each line runs the job as `valuo` through `systemd-run --scope` with `MemoryMax=768M`, `MemorySwapMax=128M`, `CPUWeight=20`, `IOWeight=20` and `nice -n 10`, so a runaway run is killed by the kernel instead of competing with the server's services. A full snapshot peaks near 200 MB. Remove it by deleting the block (`crontab -e` as root).
 
 ## Optional: anchor each snapshot on NEAR mainnet
 

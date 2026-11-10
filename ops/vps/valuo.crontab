@@ -8,4 +8,4 @@ SHELL=/bin/bash
 5 6 * * * __REPO__/ops/vps/valuo-run.sh snapshot
 
 # Hourly quote race: 1Click vs Relay, LI.FI and Across; appended to artifacts/history, commit, push.
-17 * * * * __REPO__/ops/vps/valuo-run.sh bench
+23 * * * * __REPO__/ops/vps/valuo-run.sh bench
