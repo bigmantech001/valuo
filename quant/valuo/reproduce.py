@@ -59,6 +59,7 @@ from valuo import history
 from valuo.models.bear_case import THIN_SOLVER_SAMPLE_FILLS, live_metrics, run_bear_case
 from valuo.models.market_implied import run_market_implied
 from valuo.models.relative_value import run_relative_value
+from valuo.models.bull_case import run_bull_case
 from valuo.models.sensitivity import run_sensitivity
 from valuo.models.sotp_valuation import build_inputs, deterministic_sotp, run_sotp
 from valuo.models.supply_physics import run_supply_physics
@@ -691,6 +692,7 @@ def console_summary(snapshot: Snapshot, manifest: Manifest, paths: dict[str, Pat
 # ============================================================================ derived views over the snapshot
 DERIVED_MODELS: tuple[tuple[str, Any], ...] = (
     ("market_implied", run_market_implied), ("sensitivity", run_sensitivity), ("relative_value", run_relative_value),
+    ("bull_case", run_bull_case),  # reads market_implied, so it runs after it
 )
 
 
@@ -706,6 +708,7 @@ def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None =
         t0 = time.perf_counter()
         try:
             setattr(snapshot, key, fn(snap_dict))
+            snap_dict[key] = sanitize_json(getattr(snapshot, key))  # later views may read earlier ones
         except Exception as exc:  # noqa: BLE001 - a derived view, not a prerequisite
             setattr(snapshot, key, None)
             out.append(f"reproduce: {key} failed ({type(exc).__name__}: {exc}); snapshot.{key} is null")

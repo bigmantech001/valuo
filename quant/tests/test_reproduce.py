@@ -233,8 +233,8 @@ def test_attach_derived_models_populates_keys_and_records_timings():
     timings: dict[str, float] = {}
     warnings = rp.attach_derived_models(snap, timings)
     assert warnings == []
-    assert set(timings) == {"market_implied", "sensitivity", "relative_value"}
-    assert snap.market_implied["solves"] and snap.sensitivity["rows"] and snap.relative_value["coverage"]
+    assert set(timings) == {"market_implied", "sensitivity", "relative_value", "bull_case"}
+    assert snap.market_implied["solves"] and snap.sensitivity["rows"] and snap.relative_value["coverage"] and snap.bull_case["conditions"]
     dumped = rp.sanitize_json(snap.model_dump(mode="json"))
     assert isinstance(dumped["market_implied"]["headline"], str)
 
