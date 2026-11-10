@@ -1,4 +1,4 @@
-.PHONY: reproduce reproduce-fast test test-live invariants dev build bench clean clean-dev sync history bench-history history-summary history-verify
+.PHONY: reproduce reproduce-fast test test-live invariants dev build bench clean clean-dev sync history bench-history history-summary history-verify anchor-verify anchor-list
 
 # Full live reproduction (the only configuration that writes the CANONICAL artifacts/): fetch NEAR mainnet state +
 # router quotes, run the 10,000-path Monte Carlo (seed 20261114), write artifacts/{latest_snapshot.json,manifest.json,
@@ -60,3 +60,11 @@ history-summary:
 # Re-hash every raw payload referenced by bench.jsonl (gunzip, sha256, compare).
 history-verify:
 	cd quant && uv run python -m valuo.history verify
+
+# Check the local manifest against the hashes anchored on NEAR mainnet (SocialDB). Key-free:
+#   make anchor-verify ANCHOR=<account>.near
+anchor-verify:
+	cd quant && uv run python -m valuo.anchor verify --account "$(ANCHOR)"
+
+anchor-list:
+	cd quant && uv run python -m valuo.anchor list --account "$(ANCHOR)"
