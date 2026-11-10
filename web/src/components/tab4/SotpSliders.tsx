@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Slider, Toggle } from "@/components/ui";
 import { MethodNote } from "@/components/ui/Section";
 import { fmtBps, fmtInt, fmtPct, fmtUsdCompact } from "@/lib/format";
@@ -19,6 +19,8 @@ export interface SotpSlidersProps {
   slice: SotpSnapshotSlice;
   regimeOptions: RegimeOption[];
   portCheck: PortCheck;
+  /** called with the current slider state and the implied price it produces (forecast publisher pre-fill) */
+  onScenarioChange?: (s: { state: SliderState; implied_price: number | null } | null) => void;
 }
 
 const TAU_PUB = { min: 1, max: 20, step: 0.05 };
@@ -38,7 +40,7 @@ const pct1 = (v: number) => fmtPct(v, { decimals: 1 });
  * sotp_valuation.deterministic_sotp). Defaults are the calibration values the Python run used, so the untouched
  * panel reproduces sotp.calibration.deterministic_base. Monte Carlo percentiles elsewhere on the tab do not move.
  */
-export function SotpSliders({ slice, regimeOptions, portCheck }: SotpSlidersProps) {
+export function SotpSliders({ slice, regimeOptions, portCheck, onScenarioChange }: SotpSlidersProps) {
   const defaults = useMemo(() => sliderDefaults(slice), [slice]);
   const [state, setState] = useState<SliderState | null>(defaults);
   const cal = slice.sotp?.calibration;
@@ -54,6 +56,12 @@ export function SotpSliders({ slice, regimeOptions, portCheck }: SotpSlidersProp
       return { ...built, result: null, error: e instanceof Error ? e.message : String(e) };
     }
   }, [slice, state]);
+
+  useEffect(() => {
+    if (!onScenarioChange) return;
+    const p = computed?.result?.implied_price;
+    onScenarioChange(state ? { state, implied_price: typeof p === "number" && Number.isFinite(p) ? p : null } : null);
+  }, [onScenarioChange, state, computed]);
 
   if (!state || !cal || !defaults) {
     return (

@@ -12,3 +12,6 @@ export { sliderDefaults, inputsFromSliders, monthlyFromYoy, yoyFromMonthly, conf
 export { mult, REGIME_NAME } from "./fmt";
 export { WhatYouHaveToBelieve } from "./WhatYouHaveToBelieve";
 export { RelativeValue } from "./RelativeValue";
+export { ScenarioWithForecast, type ScenarioWithForecastProps } from "./ScenarioWithForecast";
+export { ForecastPublisher, type ForecastPublisherProps } from "./ForecastPublisher";
+export { ForecastBoard, type ForecastBoardProps } from "./ForecastBoard";

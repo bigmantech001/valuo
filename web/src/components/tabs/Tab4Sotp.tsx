@@ -1,4 +1,4 @@
-import { CalibrationPanel, REGIME_NAME, EngineWaterfall, McFanCharts, PeerCompsTable, PercentileTable, RelativeValue, SensitivityGrid, SotpSliders, VerdictStrip, WhatYouHaveToBelieve, type RegimeOption } from "@/components/tab4";
+import { CalibrationPanel, REGIME_NAME, EngineWaterfall, McFanCharts, PeerCompsTable, PercentileTable, RelativeValue, ScenarioWithForecast, SensitivityGrid, VerdictStrip, WhatYouHaveToBelieve, type RegimeOption } from "@/components/tab4";
 import { Card } from "@/components/ui";
 import { fmtNear, fmtPct } from "@/lib/format";
 import { verifyPort, type SotpSnapshotSlice } from "@/lib/quantClient";
@@ -6,9 +6,9 @@ import { REGIME_KEYS } from "@/lib/types";
 import type { TabProps } from "./types";
 
 /**
- * Tab 4: what you have to believe (one-at-a-time tornado), slider-driven deterministic SOTP, Monte Carlo fan charts and percentiles, engine waterfall,
+ * Tab 4: what you have to believe (one-at-a-time tornado), slider-driven deterministic SOTP with the on-chain forecast publisher and board, Monte Carlo fan charts and percentiles, engine waterfall,
  * relative value (peer multiples, cross-check band, security budget; legacy peer comps when absent), the 5 x 5 sensitivity heatmap and the calibration panel. Server component; only the
- * slider panel is a client component and it receives the minimal snapshot slice the model reads.
+ * slider panel and the forecast cards are client components; the slider panel receives the minimal snapshot slice the model reads.
  */
 export function Tab4Sotp({ snapshot, manifest }: TabProps) {
   const sotp = snapshot.sotp;
@@ -46,7 +46,14 @@ export function Tab4Sotp({ snapshot, manifest }: TabProps) {
     <div className="space-y-12">
       <VerdictStrip sotp={sotp} totalSupplyNear={snapshot.near_rpc?.total_supply_near ?? null} />
       <WhatYouHaveToBelieve sensitivity={snapshot.sensitivity} />
-      <SotpSliders slice={slice} regimeOptions={regimeOptions} portCheck={portCheck} />
+      <ScenarioWithForecast
+        slice={slice}
+        regimeOptions={regimeOptions}
+        portCheck={portCheck}
+        snapshotSha256={manifest?.snapshot_sha256 ?? null}
+        snapshotGeneratedAt={snapshot.generated_at_utc ?? null}
+        spotUsd={snapshot.intents_forensics?.price?.current_usd ?? null}
+      />
       <div className="space-y-8">
         <McFanCharts sotp={sotp} />
         <PercentileTable sotp={sotp} />
