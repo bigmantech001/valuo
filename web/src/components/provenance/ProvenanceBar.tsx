@@ -69,17 +69,9 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-canvas/90 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
         <div className="mx-auto flex h-14 max-w-none items-center gap-x-3 px-4 sm:px-6 lg:h-auto lg:flex-wrap lg:gap-x-8 lg:gap-y-2 lg:px-[1.25vw] lg:py-3">
-          <Link href="/" className="font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
+          <Link href="/" title="Back to the overview" className="font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
             Valuo
           </Link>
-          <nav aria-label="Primary" className="hidden items-center gap-5 text-[14px] lg:flex">
-            <Link href="/" className="text-muted hover:text-ink">
-              Overview
-            </Link>
-            <Link href="/terminal" className="text-ink">
-              Terminal
-            </Link>
-          </nav>
 
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden lg:contents">
