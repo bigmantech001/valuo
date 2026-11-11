@@ -13,8 +13,12 @@ import type { RegimeKey } from "./types";
 export const SOCIAL_CONTRACT = "social.near";
 export const FORECAST_SCHEMA = "valuo-forecast/1";
 export const FORECAST_PATH = ["valuo", "forecast"] as const;
-/** 100 Tgas, as in anchor.py; a SocialDB set of ~700 bytes uses well under this. */
-export const FORECAST_GAS = "100000000000000";
+/**
+ * 30 Tgas. A first SocialDB set with storage registration burned 12.8 Tgas on mainnet (anchor tx 6ZPRJLh8...), so this
+ * keeps >2x headroom. Kept low on purpose: NEAR makes the sender hold prepaid gas at a pessimistic price before it
+ * accepts the tx (100 Tgas needed ~0.10 NEAR up front, refunded after), which blocked a wallet holding 0.1 NEAR.
+ */
+export const FORECAST_GAS = "30000000000000";
 /** SocialDB charges storage_amount_per_byte = 1e19 yoctoNEAR per byte (10 KB per NEAR). */
 export const YOCTO_PER_BYTE = 10n ** 19n;
 /** 0.01 NEAR on top of the registration minimum, credited to the account's SocialDB storage balance. */
