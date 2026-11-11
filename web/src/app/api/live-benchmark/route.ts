@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { CORRIDORS, CORRIDOR_IDS, DEFAULT_CLIPS_USD, toCorridor } from "@/lib/corridors";
 import { benchmarkAddresses, runLiveBenchmark, venueTimeoutMs } from "@/lib/liveBenchmark";
 import type { LiveBenchmarkRequest } from "@/lib/types";
+import { clientIp, createLimiter, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,6 +11,9 @@ export const runtime = "nodejs";
 const MAX_CLIP_USD = 10_000_000;
 const MIN_CLIP_USD = 1;
 
+/** Each request fires up to four outbound quotes; a landing-page race is 3 requests, a terminal race up to 9. */
+const limit = createLimiter({ perIp: 60, global: 600, windowMs: 5 * 60_000 });
+
 /**
  * POST /api/live-benchmark  { corridor_id, clip_usd }
  * Fires the 1Click / Relay / LI.FI / Across quote requests concurrently with the exact payloads
@@ -17,6 +21,8 @@ const MIN_CLIP_USD = 1;
  * the per-venue RawRecords (sha256 of each raw response). Nothing is cached or synthesised.
  */
 export async function POST(req: NextRequest): Promise<Response> {
+  const decision = limit(clientIp(req));
+  if (!decision.ok) return tooManyRequests(decision, "live quote race");
   let body: Partial<LiveBenchmarkRequest>;
   try {
     body = (await req.json()) as Partial<LiveBenchmarkRequest>;

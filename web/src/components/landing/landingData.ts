@@ -255,7 +255,18 @@ export interface RelativeValueView {
 
 export interface LandingData {
   /** snapshot.bull_case counts (null on snapshots without it) */
-  bullCase: { onTrack: number; behind: number; against: number; measured: number } | null;
+  bullCase: {
+    onTrack: number;
+    behind: number;
+    against: number;
+    measured: number;
+    conditions: { key: string; statement: string; status: "on_track" | "behind" | "against" | "not_measured" }[];
+  } | null;
+  /**
+   * Rolling 30-day sums of NEAR Intents daily volume and fees (DefiLlama, fees.daily_series), one point per
+   * 7 days over the series. One arithmetic step: sum of the 30 daily rows ending on each sampled day.
+   */
+  trailing30d: { volume: [string, number][]; fees: [string, number][] } | null;
   generatedAtUtc: string;
   runtimeS: number;
   seed: number;
@@ -521,10 +532,19 @@ export function buildLandingData(snapshot: Snapshot, manifest: Manifest | null):
   const gradedCount = scenarios.filter((s) => s.breached !== null && s.evaluated !== false).length;
   const snapAny = snapshot as unknown as Record<string, unknown>;
   const bull = snapshot.bull_case;
-  const bullCase = bull && bull.counts ? { onTrack: bull.counts.on_track, behind: bull.counts.behind, against: bull.counts.against, measured: bull.n_measured } : null;
+  const bullCase = bull && bull.counts
+    ? {
+        onTrack: bull.counts.on_track,
+        behind: bull.counts.behind,
+        against: bull.counts.against,
+        measured: bull.n_measured,
+        conditions: (bull.conditions ?? []).map((c) => ({ key: c.key, statement: c.statement, status: c.status })),
+      }
+    : null;
 
   return {
     bullCase,
+    trailing30d: trailing30d(fees),
     generatedAtUtc: snapshot.generated_at_utc,
     runtimeS: snapshot.runtime_s,
     seed: snapshot.seed,
@@ -824,4 +844,29 @@ export function fmtEvidenceValue(s: SolveView): string {
     return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(1)}% a year`;
   }
   return fmtSolveValue(s.unit, s.evidenceValue);
+}
+
+/** Rolling 30-day sums of the DefiLlama daily series, sampled every 7th day (newest day always included). */
+function trailing30d(fees: Record<string, unknown>): LandingData["trailing30d"] {
+  const cols = Array.isArray(fees.daily_series_columns) ? (fees.daily_series_columns as unknown[]).map(String) : [];
+  const rows = Array.isArray(fees.daily_series) ? (fees.daily_series as unknown[]) : [];
+  const iT = cols.indexOf("ts_unix_s"), iF = cols.indexOf("fees_usd"), iV = cols.indexOf("volume_usd");
+  if (iT < 0 || iF < 0 || iV < 0) return null;
+  const clean = rows
+    .filter((r): r is number[] => Array.isArray(r) && [iT, iF, iV].every((i) => typeof r[i] === "number" && Number.isFinite(r[i] as number)))
+    .sort((a, b) => a[iT] - b[iT]);
+  if (clean.length < 60) return null;
+  const volume: [string, number][] = [];
+  const feeSeries: [string, number][] = [];
+  for (let end = clean.length - 1; end >= 29; end -= 7) {
+    let v = 0, f = 0;
+    for (let i = end - 29; i <= end; i++) {
+      v += clean[i][iV];
+      f += clean[i][iF];
+    }
+    const day = new Date(clean[end][iT] * 1000).toISOString().slice(0, 10);
+    volume.unshift([day, v]);
+    feeSeries.unshift([day, f]);
+  }
+  return { volume, fees: feeSeries };
 }

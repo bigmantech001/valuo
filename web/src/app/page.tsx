@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fmtInt, fmtUtc } from "@/lib/format";
 import { loadArtifacts } from "@/lib/snapshot";
+import { loadHistory } from "@/lib/history";
 import { ManifestProvider } from "@/components/provenance/ManifestContext";
 import { BearPreview, Findings, Hero, LandingNav, Method, Questions, Reproduce, Scorecard, TerminalPreview, buildLandingData } from "@/components/landing";
 
@@ -12,14 +13,18 @@ export const dynamic = "force-dynamic";
  * or render their empty states.
  */
 export default async function LandingPage() {
-  const { snapshot, manifest } = await loadArtifacts();
+  const [{ snapshot, manifest }, history] = await Promise.all([loadArtifacts(), loadHistory()]);
   const data = snapshot ? buildLandingData(snapshot, manifest) : null;
+  // Hourly scheduler races: median cross-VM headroom per run (artifacts/history/summary.json).
+  const headroomHistory = (history.summary?.bench.series.headroom_bps_cross_vm?.points ?? [])
+    .map((p) => p[1])
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
 
   return (
     <ManifestProvider manifest={manifest}>
       <LandingNav />
       <main>
-        <Hero data={data} />
+        <Hero data={data} headroomHistory={headroomHistory} />
         {data ? <Findings data={data} /> : null}
         <Questions data={data} />
         <Method data={data} />

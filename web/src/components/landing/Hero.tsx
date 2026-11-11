@@ -1,19 +1,21 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { fmtBlock, fmtBps, fmtInt, fmtNear, fmtNum, fmtUsdCompact, fmtUtc } from "@/lib/format";
+import { fmtBlock, fmtInt, fmtNear, fmtNum, fmtUsdCompact, fmtUtc } from "@/lib/format";
 import { explorerBlockUrl } from "@/lib/manifestIndex";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProvenanceBadge } from "@/components/provenance/ProvenanceBadge";
-import { VENUE_LABEL, bindingSolve, fmtEvidenceValue, fmtSolveValue, fmtTimes, minus, rankPhrase, signTone, solveByParam, type LandingData } from "./landingData";
-
-const TONE_TEXT = { emerald: "text-emerald", crimson: "text-crimson", neutral: "text-ink" } as const;
+import { bindingSolve, fmtEvidenceValue, fmtSolveValue, fmtTimes, minus, rankPhrase, type LandingData } from "./landingData";
+import { Figure } from "./HeroFigure";
+import { GapBars, Sparkline, StatusDots } from "./HeroVisuals";
+import { LiveBlock, LiveRaceFigure } from "./HeroLive";
 
 /**
  * Above the fold: the question the page answers (what the market price requires), a lede built
  * from market_implied and relative_value, two calls to action and a key-figures panel pinned to
  * the snapshot's mainnet block. Every figure is read from the snapshot.
  */
-export function Hero({ data }: { data: LandingData | null }) {
+export function Hero({ data, headroomHistory = [] }: { data: LandingData | null; headroomHistory?: number[] }) {
+  const mi = data?.marketImplied ?? null;
   return (
     <section className="border-b border-border">
       <div className="mx-auto grid max-w-none gap-14 px-6 lg:px-[5vw] pb-20 pt-16 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16 lg:pb-24 lg:pt-24">
@@ -22,7 +24,9 @@ export function Hero({ data }: { data: LandingData | null }) {
           <h1 className="mt-5 max-w-[18ch] font-serif text-[42px] font-medium leading-[1.06] tracking-tight text-ink sm:text-[54px] lg:text-[58px]">
             The long-term case for NEAR, made falsifiable.
           </h1>
-          <p className="mt-7 max-w-[38rem] text-[17px] leading-[1.65] text-muted">{data ? <>{data.bullCase ? <BullLine bull={data.bullCase} /> : null}<Lede data={data} /></> : <>Valuo measures NEAR&apos;s execution, supply and fee data from public endpoints and solves for what the market price assumes. Generate a snapshot to see the figures.</>}</p>
+          <p className="mt-7 max-w-[38rem] text-[17px] leading-[1.65] text-muted">{data ? <Lede data={data} /> : <>Valuo measures NEAR&apos;s execution, supply and fee data from public endpoints and solves for what the market price assumes. Generate a snapshot to see the figures.</>}</p>
+          {mi && mi.currentFdv !== null && mi.baseFdv !== null ? <GapBars market={mi.currentFdv} supported={mi.baseFdv} mcMedian={mi.baseFdvMcP50 ?? null} /> : null}
+          {data?.bullCase ? <StatusDots conditions={data.bullCase.conditions} counts={data.bullCase} /> : null}
           <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link
               href="/terminal"
@@ -42,7 +46,7 @@ export function Hero({ data }: { data: LandingData | null }) {
           </div>
         </div>
 
-        <KeyFigures data={data} />
+        <KeyFigures data={data} headroomHistory={headroomHistory} />
       </div>
     </section>
   );
@@ -50,68 +54,42 @@ export function Hero({ data }: { data: LandingData | null }) {
 
 const T = ({ children }: { children: ReactNode }) => <span className="tnum text-ink">{children}</span>;
 
-/** Opening clause from snapshot.bull_case: how many of the case's conditions hold today. */
-function BullLine({ bull }: { bull: NonNullable<LandingData["bullCase"]> }) {
-  return (
-    <>
-      Of the <T>{bull.measured}</T> conditions NEAR&apos;s long-term case needs, <T>{bull.onTrack}</T> are on track today,{" "}
-      <T>{bull.behind}</T> are behind and <T>{bull.against}</T> {bull.against === 1 ? "is" : "are"} against it (
-      <a href="/terminal#thesis" className="text-accent underline-offset-4 hover:underline">
-        scorecard
-      </a>
-      ).{" "}
-    </>
-  );
-}
-
 /**
- * The lede, assembled from market_implied and relative_value. Each clause is conditional on the
- * sign or rank it describes, so the paragraph stays true when the numbers move.
+ * Two sentences from market_implied: the gap, then what closing it on Intents alone requires against the
+ * measured value. Each clause is conditional on the sign it describes, so the text stays true when the numbers
+ * move. The gap bars and status dots below carry the rest.
  */
 function Lede({ data }: { data: LandingData }) {
   const mi = data.marketImplied;
-  const fees = data.relativeValue?.feesRunRate ?? null;
-  const rank = rankPhrase(fees);
   const bind = bindingSolve(data);
-  const take = solveByParam(data, "tau_pub_bps");
   const gap = mi?.gapMultiple ?? null;
-  const ceiling = take && take.evidenceValue !== null ? take : null;
   return (
     <>
       {mi && mi.currentFdv !== null && mi.baseFdv !== null ? (
         <>
-          The market values NEAR at <T>{fmtUsdCompact(mi.currentFdv)}</T>. Intents cash flow, discounted on the model&apos;s expected path, supports <T>{fmtUsdCompact(mi.baseFdv)}</T>
+          The market values NEAR at <T>{fmtUsdCompact(mi.currentFdv)}</T>; Intents cash flow on the model&apos;s expected path supports <T>{fmtUsdCompact(mi.baseFdv)}</T>
           {gap !== null && gap > 1 ? (
             <>
-              : the price carries <T>{fmtTimes(gap)}</T> what Intents fees alone justify at base inputs.{" "}
+              , a <T>{fmtTimes(gap)}</T> gap.{" "}
             </>
           ) : (
             <>, {gap !== null && gap < 1 ? "above" : "in line with"} the market value. </>
           )}
         </>
       ) : null}
-      {fees && fees.value !== null && rank ? (
-        <>
-          Priced as a layer 1, NEAR trades at <T>{fmtSolveValue("x", fees.value)}</T> annualised fees, {rank} (peer median <T>{fmtSolveValue("x", fees.peerMedian)}</T>).{" "}
-        </>
-      ) : null}
       {gap !== null && gap > 1 && bind ? (
         <>
-          On Intents alone, closing the gap needs <T>{fmtSolveValue(bind.unit, bind.requiredValue)}</T> of {bind.shortLabel} against a measured <T>{fmtEvidenceValue(bind)}</T>
-          {ceiling && ceiling.param !== bind.param && ceiling.requiredValue !== null ? (
-            <>
-              , or a <T>{fmtSolveValue("bps", ceiling.requiredValue)}</T> take against a <T>{fmtSolveValue("bps", ceiling.evidenceValue)}</T> competitive ceiling
-            </>
-          ) : null}
-          .{" "}
+          Closing it on Intents alone needs <T>{fmtSolveValue(bind.unit, bind.requiredValue)}</T> of {bind.shortLabel} against a measured <T>{fmtEvidenceValue(bind)}</T>; below
+          are the measured strengths, the weaknesses and the triggers that would falsify the case.
         </>
-      ) : null}
-      Below: the measured strengths, the measured weaknesses, and the triggers that would falsify the case.
+      ) : (
+        <>Below: the measured strengths, the measured weaknesses, and the triggers that would falsify the case.</>
+      )}
     </>
   );
 }
 
-function KeyFigures({ data }: { data: LandingData | null }) {
+function KeyFigures({ data, headroomHistory }: { data: LandingData | null; headroomHistory: number[] }) {
   if (!data) {
     return (
       <EmptyState title="No snapshot on disk yet" commands={["make reproduce", "make dev"]} className="self-center">
@@ -126,7 +104,8 @@ function KeyFigures({ data }: { data: LandingData | null }) {
   const bind = bindingSolve(data);
   const cross = bench?.headroom.cross_vm ?? null;
   const crossCorridor = bench?.corridors.find((c) => c.archetype === "cross_vm") ?? null;
-  const crossVenue = crossCorridor?.bestCompetitor ? (VENUE_LABEL[crossCorridor.bestCompetitor] ?? crossCorridor.bestCompetitor) : null;
+  const t30 = data.trailing30d;
+  const span = t30 && t30.volume.length ? `${t30.volume[0][0]} to ${t30.volume[t30.volume.length - 1][0]}` : "";
   const marketFdv = mi?.currentFdv ?? data.sotp.currentFdv;
 
   return (
@@ -139,6 +118,7 @@ function KeyFigures({ data }: { data: LandingData | null }) {
           </a>
         </div>
         <div className="tnum text-[13px] text-dim">{fmtUtc(chain.blockTsUtc)}</div>
+        <LiveBlock snapshotBlock={chain.block} />
       </div>
       <dl className="divide-y divide-border">
         <Figure
@@ -169,6 +149,14 @@ function KeyFigures({ data }: { data: LandingData | null }) {
               "No reachable solve with measured evidence this run"
             )
           }
+          spark={
+            t30 && bind?.param === "public_volume_growth_yoy" ? (
+              <Sparkline
+                points={t30.volume.map((p) => p[1])}
+                caption={`Intents volume, rolling 30 days: ${fmtUsdCompact(t30.volume[0][1])} to ${fmtUsdCompact(t30.volume[t30.volume.length - 1][1])} (${span}, DefiLlama)`}
+              />
+            ) : null
+          }
           source={
             <a href="/terminal#sotp" className="text-[12px] text-dim underline decoration-dotted underline-offset-[3px] hover:text-muted">
               Solve
@@ -188,17 +176,26 @@ function KeyFigures({ data }: { data: LandingData | null }) {
             )
           }
           source={<ProvenanceBadge source="defillama" name="fees:near-intents:dailyFees" />}
-        />
-        <Figure
-          label="1Click headroom, cross-VM"
-          value={<span className={TONE_TEXT[signTone(cross)]}>{bench ? minus(fmtBps(cross, { decimals: 2 })) : "Not run"}</span>}
-          note={
-            bench
-              ? `${cross === null ? "No comparable cell" : cross >= 0 ? "More" : "Less"} output than the best competitor${crossVenue ? ` (${crossVenue})` : ""}`
-              : "Snapshot built without the quote benchmark"
+          spark={
+            t30 ? (
+              <Sparkline
+                points={t30.fees.map((p) => p[1])}
+                caption={`Intents fees, rolling 30 days: ${fmtUsdCompact(t30.fees[0][1])} to ${fmtUsdCompact(t30.fees[t30.fees.length - 1][1])} (${span})`}
+              />
+            ) : null
           }
-          source={crossCorridor ? <ProvenanceBadge source="oneclick" name={`quote:${crossCorridor.id}:50000`} /> : null}
         />
+        {bench ? (
+          <LiveRaceFigure
+            corridorId={crossCorridor?.id ?? null}
+            snapshotBps={cross}
+            snapshotVenue={crossCorridor?.bestCompetitor ?? null}
+            history={headroomHistory}
+            source={crossCorridor ? <ProvenanceBadge source="oneclick" name={`quote:${crossCorridor.id}:50000`} /> : null}
+          />
+        ) : (
+          <Figure label="1Click headroom, cross-VM" value="Not run" note="Snapshot built without the quote benchmark" />
+        )}
         <Figure
           label="Storage locked by intents.near"
           value={stateLock.intentsLocked !== null ? fmtNear(stateLock.intentsLocked) : "Not measured"}
@@ -214,23 +211,5 @@ function KeyFigures({ data }: { data: LandingData | null }) {
         Snapshot generated {fmtUtc(data.generatedAtUtc)} from {fmtInt(data.provenance.records)} hashed source payloads.
       </div>
     </aside>
-  );
-}
-
-function Figure({ label, value, unit, note, source }: { label: string; value: ReactNode; unit?: string; note?: ReactNode; source?: ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 items-baseline gap-x-6 gap-y-1 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-6">
-      <dt className="text-[14px] text-muted">
-        {label}
-        {source ? <span className="ml-2.5 align-baseline">{source}</span> : null}
-      </dt>
-      <dd className="sm:row-span-2 sm:self-center sm:text-right">
-        <span className="tnum text-[22px] font-medium leading-none tracking-tight text-ink">{value}</span>
-        {unit ? <span className="ml-1.5 text-[13px] text-muted">{unit}</span> : null}
-      </dd>
-      <dd className="min-w-0 text-[13px] leading-snug text-dim">
-        {note}
-      </dd>
-    </div>
   );
 }
