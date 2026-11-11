@@ -37,6 +37,7 @@ Failures never abort the run: each missing piece is a warning and a null with a 
 from __future__ import annotations
 
 import asyncio
+import os
 import math
 import time
 from collections import Counter
@@ -67,8 +68,12 @@ PER_PAGE = 100
 # under it. With NEARBLOCKS_API_KEY set the spacing drops to the shared NearBlocks page delay.
 UNAUTH_DELAY_S = 10.5
 # Wall-time cap on the sample loop so 429 back-offs cannot stretch `make reproduce` indefinitely; windows not
-# reached are reported as failed and the rates use what returned.
-BUDGET_S = 240.0
+# reached are reported as failed and the rates use what returned. The unattended daily job (ops/vps) raises it
+# with VALUO_CHAINSIG_BUDGET_S, since nobody waits on it and a full 12-window sample is worth the minutes.
+BUDGET_S = float(os.environ.get("VALUO_CHAINSIG_BUDGET_S") or 240.0)
+# Windows that failed in the first pass (429 ladder exhausted) are retried once after this cool-down, while the
+# budget lasts: NearBlocks' per-minute quota refills, so a second pass recovers most of them.
+RETRY_COOLDOWN_S = 45.0
 CADENCE_PROBE_BLOCKS = 100_000
 SIGN_METHOD = "sign"
 RESPOND_METHOD = "respond"
@@ -76,6 +81,19 @@ MIN_WINDOWS_FOR_TREND = 5
 # 429s still arrive at that spacing once the quota is partly spent (observed), so back off 8 / 16 / 32 s before giving up.
 _RETRY_KW: dict[str, Any] = {"retries": 3, "backoff": 8.0, "retry_after_cap_s": 30.0, "transport_retries": 1}
 BRIDGE_SUFFIX = ".bridge.near"
+
+
+def interleaved(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Request order for ``plan``: alternate the 7-day ``level`` anchors with the ``midnight`` series, oldest
+    midnight first after today's. A budget cut then still leaves windows in both strata (last 7 days and days
+    7-30) instead of only the first half of the list, so the 30-day rate stays measurable."""
+    level = [p for p in plan if p["kind"] == "level"]
+    mid = [p for p in plan if p["kind"] == "midnight"]
+    mid = mid[:1] + mid[:0:-1] if mid else mid  # today, then 28, 24, ... 4 days back
+    out: list[dict[str, Any]] = []
+    for i in range(max(len(level), len(mid))):
+        out += [x[i] for x in (mid, level) if i < len(x)]
+    return out
 
 
 def sample_plan(head_ns: int, *, level_anchors: int = LEVEL_ANCHORS, level_spacing_h: float = LEVEL_SPACING_H,
@@ -361,34 +379,55 @@ async def _collect(client: httpx.AsyncClient, ledger: ProvenanceLedger, warnings
     spb = (head_ns - probe_ns) / 1e9 / (head_h - probe_h)
     out.update({"head_block": head_h, "head_time_utc": _utc(head_ns), "seconds_per_block": spb})
 
-    plan = sample_plan(head_ns, **plan_kwargs)
+    plan = interleaved(sample_plan(head_ns, **plan_kwargs))
     windows: list[dict[str, Any]] = []
-    failed = transport_streak = 0
     t_start = time.monotonic()
-    for i, anchor in enumerate(plan):
-        if time.monotonic() - t_start > budget_s:
-            warnings.append(f"chain_signatures: {budget_s:g} s sampling budget spent (NearBlocks rate limits) at window {i + 1}/{len(plan)}; remaining windows skipped")
-            failed += len(plan) - i
+    pending = list(range(len(plan)))
+    stopped = False
+    for pass_no in (1, 2):
+        if not pending or stopped:
             break
-        await asyncio.sleep(delay)
-        if anchor["kind"] == "level":
-            before = head_h - round(anchor["offset_h"] * 3600 / spb)
-            anchor = {**anchor, "before_block": before}
-            page, rec = await _page(client, ledger, {"before_block": before}, f"txns:{CONTRACT}:before_block:{before}")
-        else:
-            page, rec = await _page(client, ledger, {"before_date": anchor["before_date"]}, f"txns:{CONTRACT}:before_date:{anchor['before_date']}")
-        summ = summarize_window(page.get("txns") if rec.ok and isinstance(page, dict) else None)
-        if summ is None:
-            failed += 1
-            transport_streak = transport_streak + 1 if rec.http_status is None else 0
-            if transport_streak >= 2:
-                warnings.append(f"chain_signatures: NearBlocks unreachable twice in a row at window {i + 1}/{len(plan)}; remaining windows skipped")
-                failed += len(plan) - i - 1
+        if pass_no == 2:
+            if time.monotonic() - t_start + RETRY_COOLDOWN_S > budget_s:
                 break
-            continue
+            await asyncio.sleep(RETRY_COOLDOWN_S if delay > 0 else 0)
+        retry: list[int] = []
         transport_streak = 0
-        summ.update(anchor)
-        windows.append(summ)
+        # a distinct record name per pass: the failed pass-1 response keeps its own raw file and hash
+        suffix = "" if pass_no == 1 else ":retry"
+        for n, i in enumerate(pending):
+            anchor = plan[i]
+            if time.monotonic() - t_start > budget_s:
+                warnings.append(f"chain_signatures: {budget_s:g} s sampling budget spent (NearBlocks rate limits) in pass {pass_no} with {len(pending) - n} window(s) left; set VALUO_CHAINSIG_BUDGET_S to sample them")
+                retry += pending[n:]
+                stopped = True
+                break
+            await asyncio.sleep(delay)
+            if anchor["kind"] == "level":
+                before = head_h - round(anchor["offset_h"] * 3600 / spb)
+                anchor = {**anchor, "before_block": before}
+                page, rec = await _page(client, ledger, {"before_block": before}, f"txns:{CONTRACT}:before_block:{before}{suffix}")
+            else:
+                page, rec = await _page(client, ledger, {"before_date": anchor["before_date"]}, f"txns:{CONTRACT}:before_date:{anchor['before_date']}{suffix}")
+            summ = summarize_window(page.get("txns") if rec.ok and isinstance(page, dict) else None)
+            if summ is None:
+                retry.append(i)
+                transport_streak = transport_streak + 1 if rec.http_status is None else 0
+                if transport_streak >= 2:
+                    warnings.append(f"chain_signatures: NearBlocks unreachable twice in a row in pass {pass_no}; remaining windows skipped")
+                    retry += pending[n + 1:]
+                    stopped = True
+                    break
+                continue
+            transport_streak = 0
+            summ.update(anchor)
+            windows.append(summ)
+        if pass_no == 2 and len(retry) < len(pending):
+            warnings.append(f"chain_signatures: retry pass recovered {len(pending) - len(retry)} of {len(pending)} window(s) after a {RETRY_COOLDOWN_S:g} s cool-down")
+        pending = retry
+    failed = len(pending)
+    out["windows_planned"] = len(plan)
+    windows.sort(key=lambda w: -(w.get("newest_ns") or 0))
     if failed:
         warnings.append(f"chain_signatures: {failed} of {len(plan)} sample windows failed; rates use the {len(windows)} that returned")
     agg = aggregate_windows(windows, head_ns=head_ns)

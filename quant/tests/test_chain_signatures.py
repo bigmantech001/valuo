@@ -296,3 +296,39 @@ def test_sampling_budget_stops_the_loop(page, load_fixture, tmp_path):
 
     out = asyncio.run(go())
     assert out["windows_ok"] == 0 and out["status"] == "count_only" and any("sampling budget" in w for w in warnings)
+
+
+def test_interleaved_order_covers_both_strata_early():
+    plan = cs_mod.interleaved(cs_mod.sample_plan(HEAD_NS))
+    assert len(plan) == 12 and {id(p) for p in plan} == {id(p) for p in plan}
+    first4 = plan[:4]
+    # today's midnight, a 7-day level anchor, the oldest midnight (days 7-30 stratum), another level anchor
+    assert [p["kind"] for p in first4] == ["midnight", "level", "midnight", "level"]
+    assert first4[0]["before_date"] == "2026-11-10" and first4[2]["before_date"] == "2026-10-13"
+    assert sorted(p.get("before_date", "") for p in plan if p["kind"] == "midnight") == sorted(
+        p["before_date"] for p in cs_mod.sample_plan(HEAD_NS) if p["kind"] == "midnight")
+
+
+def test_retry_pass_recovers_rate_limited_windows(page, load_fixture, tmp_path, monkeypatch):
+    """Windows that exhaust the 429 ladder in pass 1 are fetched again in pass 2 and counted."""
+    monkeypatch.setattr(cs_mod, "_RETRY_KW", {"retries": 0})
+    base = _mock_handler(page, load_fixture("nearblocks_v1_signer_count.json"))
+    seen: dict[str, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "nearblocks" in url and not url.split("?")[0].endswith("/count"):
+            seen[url] = seen.get(url, 0) + 1
+            if seen[url] == 1 and len(seen) % 3 == 0:  # every third window is refused once
+                return httpx.Response(429, json={"message": "You have exceeded your API request limit."})
+        return base(request)
+
+    out, warnings, ledger = _run(handler, tmp_path)
+    assert out["windows_ok"] == 12 and out["windows_planned"] == 12
+    names = [r.name for r in ledger.by_source("nearblocks")]
+    assert len(names) == len(set(names)) and sum(n.endswith(":retry") for n in names) == 4
+    assert out["sign_per_day_30d"] is not None and out["trend_windows"] == 8
+    assert any("retry pass recovered 4 of 4" in w for w in warnings)
+    assert not any("sample windows failed" in w for w in warnings)
+    newest = [w["newest_ns"] for w in out["windows"]]
+    assert newest == sorted(newest, reverse=True)

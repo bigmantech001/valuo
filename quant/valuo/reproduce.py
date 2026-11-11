@@ -38,6 +38,8 @@ import httpx
 
 from valuo import __version__, assumptions, config
 from valuo.collectors.chain_signatures import attach_context as attach_chain_signatures_context
+from valuo.models.backtest import load_dexs_chart
+from valuo.models.volume_growth import apply_measured_growth, measure_volume_growth
 from valuo.collectors.chain_signatures import PER_PAGE as PER_PAGE_CS, collect_chain_signatures
 from valuo.collectors.comps import collect_comps_async, multiple
 from valuo.collectors.execution_bench import collect_execution_bench
@@ -480,6 +482,20 @@ def build_evidence_scorecard(
             split_src, "medium" if material else "low",
             "nearstats derives confidential volume as the NEAR-reported total minus explorer-visible public volume; DefiLlama agrees with the total day-for-day",
         ))
+    elif share_status == "onchain_estimate" and isinstance(share, (int, float)):
+        material = share >= materiality
+        lo, hi = vol.get("confidential_share_low"), vol.get("confidential_share_high")
+        est = vol.get("confidential_share_estimate") or {}
+        band = f" (band {lo:.1%}-{hi:.1%})" if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) else ""
+        claims.append(_claim(
+            "Confidential (dark-pool) execution is a material share of 30d NEAR Intents volume",
+            "DERIVED" if material else "NOT_SUPPORTED",
+            f"{share:.1%}{band} estimated on-chain: Confidential Intents Treasury 24h inflow {fmt_usd(est.get('flow_in_24h_usd'))} / outflow "
+            f"{fmt_usd(est.get('flow_out_24h_usd'))} against 24h volume {fmt_usd(est.get('volume_24h_usd'))}; {'>=' if material else '<'} {materiality:.0%} materiality line",
+            f"{_record_ref(ledger, 'near_rpc', 'confidential:balances:head')} treasury balances in intents.near (NEAR mainnet RPC)", "low",
+            "nearstats' split was rejected by the plausibility guard; the share is estimated from the public treasury boundary instead. "
+            "Biases: same-hour shield/unshield netting and in-shard turnover push it down, solver inventory pushes it up; 24h window",
+        ))
     elif share_status == "implausible_fallback":
         reasons = "; ".join(vol.get("confidential_share_reason") or [])
         claims.append(_claim(
@@ -894,6 +910,24 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
         near_price_usd=forensics.price.get("current_usd"),
     )
 
+    # Volume growth: measured from the DefiLlama daily chart this run fetched, replacing the registry's fixed 30%/yr.
+    # Only the base preset; the bull/bear presets are deliberate scenarios and keep their fixed values.
+    growth_warnings: list[str] = []
+    chart, chart_src, chart_sha = load_dexs_chart(paths["raw"], {"intents_forensics": {"fees": forensics.fees}})
+    volume_growth = measure_volume_growth(chart, source=chart_src, source_sha256=chart_sha)
+    if args.preset == "base":
+        registry, used = apply_measured_growth(registry, volume_growth)
+        volume_growth["used_in_model"] = used
+        if used:
+            ci = volume_growth["ci90"]
+            log(f"volume growth MEASURED: {volume_growth['growth_yoy']:+.1%}/yr (90% CI {ci[0]:+.1%} to {ci[1]:+.1%}, {volume_growth['n_days']} days)")
+        else:
+            growth_warnings.append(f"volume growth not measured ({volume_growth.get('note') or volume_growth['status']}); "
+                                   f"public_volume_growth_yoy stays the registry assumption {assumptions.value('public_volume_growth_yoy'):+.0%}")
+    else:
+        volume_growth["used_in_model"] = False
+        volume_growth["note"] = f"preset {args.preset!r} fixes public_volume_growth_yoy; the measurement is reported, not used"
+
     log("models: supply_physics -> sotp -> bear_case")
     t0 = time.perf_counter()
     supply = run_supply_physics(
@@ -911,13 +945,14 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
     timings["bear_case"] = round(time.perf_counter() - t0, 3)
     scorecard = build_evidence_scorecard(truth, bench, forensics, supply, sotp, comps, ledger, chain_signatures=chain_sigs)
 
-    warnings = _merge_warnings(ledger.warnings, supply.warnings, [f"sotp: {w}" if not w.startswith("sotp") else w for w in (sotp.calibration or {}).get("warnings", [])])
+    warnings = _merge_warnings(ledger.warnings, growth_warnings, supply.warnings, [f"sotp: {w}" if not w.startswith("sotp") else w for w in (sotp.calibration or {}).get("warnings", [])])
     nan_hits: list[str] = []
     runtime = time.perf_counter() - t_start
     snapshot = Snapshot(
         generated_at_utc=started_utc, seed=args.seed, runtime_s=round(runtime, 3), valuo_version=__version__,
         near_rpc=truth, execution_bench=bench, intents_forensics=forensics, comps=comps, supply_physics=supply, sotp=sotp, bear_case=bear,
         evidence_scorecard=scorecard, assumptions=assumptions.as_list(registry), warnings=warnings, provenance_summary=ledger.summary(),
+        volume_growth=volume_growth,  # extra field: the measured growth fit (and whether the model used it)
         chain_signatures=chain_sigs,  # extra field (OpenModel extra="allow"); null when the audit failed
         run_config={
             "argv": list(getattr(args, "argv_used", [])), "skip_bench": args.skip_bench, "paths": args.paths, "seed": args.seed,

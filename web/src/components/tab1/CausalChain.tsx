@@ -92,15 +92,19 @@ export function CausalChain({ snapshot, className }: { snapshot: Snapshot; class
   const confShare = forensics?.volume?.confidential_share_30d ?? null;
   const confStatus = forensics?.volume?.confidential_share_status ?? cal?.confidential_share_status ?? null;
   // Older snapshots carry no status: treat the share as measured only when the status says so or is absent.
-  const confMeasured = confStatus === null || confStatus === "measured";
+  const confEstimated = confStatus === "onchain_estimate";
+  const confMeasured = confStatus === null || confStatus === "measured" || confEstimated;
   const confWhy = confStatus === "implausible_fallback" ? "nearstats split implausible" : "nearstats split unavailable";
+  const confLo = forensics?.volume?.confidential_share_low ?? null;
+  const confHi = forensics?.volume?.confidential_share_high ?? null;
+  const confBand = isNum(confLo) && isNum(confHi) ? `${fmtPct(confLo, { decimals: 1 })} to ${fmtPct(confHi, { decimals: 1 })}` : null;
   const solverCi = solver?.hhi_solver_ci90 ?? null;
   const depositCi = forensics?.caller_sample?.hhi_external_ci90 ?? null;
   const ciText = (ci: [number, number] | null | undefined) => (ci && isNum(ci[0]) && isNum(ci[1]) ? `90% CI ${fmtInt(ci[0])} to ${fmtInt(ci[1])}` : null);
   const windowDays = isNum(fees?.take_rate_window_days) ? fees.take_rate_window_days : 30;
   const claim2 =
     isNum(fees?.gross_take_bps) && isNum(fees?.net_take_bps)
-      ? `NEAR Intents keeps ${fmtBps(fees.gross_take_bps, { signed: false, decimals: 2 })} of volume before revenue sharing and ${fmtBps(fees.net_take_bps, { signed: false, decimals: 2 })} after, on ${fmtUsdCompact(fees?.volume_30d_usd ?? null)} of ${fmtInt(windowDays)}-day volume.${isNum(confShare) ? (confMeasured ? ` ${fmtPct(confShare, { decimals: 1 })} of that volume settles confidentially.` : ` The confidential share is not measured this run (${confWhy}); the model assumes ${fmtPct(confShare, { decimals: 0 })}.`) : ""}${solver && isNum(solver.n_eff_solver) ? ` Fills spread across the equivalent of ${fmtNum(solver.n_eff_solver, { decimals: 1 })} equal-sized solvers${thin ? ", on a thin sample" : ""}.` : ""}`
+      ? `NEAR Intents keeps ${fmtBps(fees.gross_take_bps, { signed: false, decimals: 2 })} of volume before revenue sharing and ${fmtBps(fees.net_take_bps, { signed: false, decimals: 2 })} after, on ${fmtUsdCompact(fees?.volume_30d_usd ?? null)} of ${fmtInt(windowDays)}-day volume.${isNum(confShare) ? (confEstimated ? ` About ${fmtPct(confShare, { decimals: 1 })} of that volume settles confidentially, estimated on-chain from Confidential Intents Treasury flows${confBand ? ` (band ${confBand})` : ""}.` : confMeasured ? ` ${fmtPct(confShare, { decimals: 1 })} of that volume settles confidentially.` : ` The confidential share is not measured this run (${confWhy}); the model assumes ${fmtPct(confShare, { decimals: 0 })}.`) : ""}${solver && isNum(solver.n_eff_solver) ? ` Fills spread across the equivalent of ${fmtNum(solver.n_eff_solver, { decimals: 1 })} equal-sized solvers${thin ? ", on a thin sample" : ""}.` : ""}`
       : "Take-rate fields are missing from this snapshot.";
   const items2: FigureItem[] = [
     { key: "gross", label: "Gross take", sub: `Fees over volume, ${fmtInt(windowDays)} days`, value: fmtBps(fees?.gross_take_bps ?? null, { signed: false, decimals: 2 }), prov: { source: "defillama", name: "fees:near-intents" } },
@@ -132,16 +136,22 @@ export function CausalChain({ snapshot, className }: { snapshot: Snapshot; class
     label: "Confidential share of volume",
     sub: !confMeasured
       ? `Assumed ${fmtPct(confShare, { decimals: 0 })} (${confWhy}); not a measurement`
-      : forensics?.confidential_tvl_verified === false
+      : confEstimated
+        ? `On-chain estimate from treasury flows, last 24 h${confBand ? `; band ${confBand}` : ""}`
+        : forensics?.confidential_tvl_verified === false
         ? `TVL of ${fmtUsdCompact(forensics.confidential_tvl_usd ?? null)} is unverified by NearStats`
         : "Last 30 days",
     value: confMeasured ? fmtPct(confShare, { decimals: 1 }) : `Assumed ${fmtPct(confShare, { decimals: 0 })}`,
-    badge: confMeasured ? null : (
+    badge: confEstimated ? (
+      <Badge variant="derived" title={forensics?.volume?.confidential_share_source ?? "Estimated from Confidential Intents Treasury boundary flows on NEAR mainnet"}>
+        Estimate
+      </Badge>
+    ) : confMeasured ? null : (
       <Badge variant="assumption" title={forensics?.volume?.confidential_share_source ?? "Registry assumption; the nearstats public/confidential split was not used this run"}>
         Assumption
       </Badge>
     ),
-    prov: { source: "nearstats", name: "summary" },
+    prov: confEstimated ? { source: "near_rpc", name: "confidential:balances:head" } : { source: "nearstats", name: "summary" },
   });
 
   // ------------------------------------------------------------------ 3. sinks against issuance

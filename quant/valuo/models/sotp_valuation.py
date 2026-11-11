@@ -505,6 +505,16 @@ def _volumes_30d(
                else "(nearstats split rejected as implausible by confidential_split_guard)")
             + "; Engine 2 rests on that assumption and is reported as NOT MEASURED"
         )
+    elif share is not None and status == "onchain_estimate":
+        # nearstats' split was rejected; intents_forensics estimated the share from the Confidential Intents Treasury
+        # boundary flows on NEAR mainnet. Evidence, not an assumption: Engine 2 is valued on it, with the band reported.
+        share_src = str(vol.get("confidential_share_source") or "on-chain estimate: Confidential Intents Treasury boundary flow / 24h volume")
+        lo, hi = _num(vol, "confidential_share_low"), _num(vol, "confidential_share_high")
+        warnings.append(
+            f"sotp: confidential share {share:.1%} is an ON-CHAIN ESTIMATE from Confidential Intents Treasury boundary flows"
+            + (f" (band {lo:.1%}-{hi:.1%})" if lo is not None and hi is not None else "")
+            + ", not nearstats' split (rejected as implausible); 24h window, biases listed in intents_forensics.volume.confidential_share_estimate"
+        )
     elif share is None:
         share = 0.0
         share_src = "not measured: nearstats public/confidential split unavailable; confidential volume credited 0 (Engine 2 not measured)"
@@ -515,6 +525,7 @@ def _volumes_30d(
     conf = total * share
     pub = total - conf
     meta = {"volume_30d_total_usd": total, "volume_30d_source": total_src, "confidential_share_source": share_src,
+            "confidential_share_low": _num(vol, "confidential_share_low"), "confidential_share_high": _num(vol, "confidential_share_high"),
             "confidential_share_assumed": not measured, "confidential_engine_measured": measured,
             "confidential_share_status": status or ("measured" if measured else "unavailable")}
     return max(pub, 0.0), max(conf, 0.0), meta
@@ -943,6 +954,17 @@ def build_inputs(
         )
         if "confidential_share" in reg:
             labeled["confidential_share"] = reg["confidential_share"].model_copy()
+    elif vol_meta.get("confidential_share_status") == "onchain_estimate":
+        lo, hi = vol_meta.get("confidential_share_low"), vol_meta.get("confidential_share_high")
+        pt = _point(
+            "confidential_share_start", s0, "ratio", "derived",
+            f"{vol_meta.get('confidential_share_source')}. Estimated from the Confidential Intents Treasury's NEP-245 balances in intents.near "
+            "(hourly snapshots over 24h, priced with the live 1Click token list); band from the inflow and outflow sides and whether the 24h "
+            "total already includes confidential flow.",
+        )
+        if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo <= s0 <= hi:
+            pt = pt.model_copy(update={"low": float(lo), "high": float(hi)})
+        labeled["confidential_share_start"] = pt
     elif vol_meta.get("confidential_share_assumed"):
         labeled["confidential_share_start"] = _point(
             "confidential_share_start", s0, "ratio", "assumption",
@@ -1154,6 +1176,9 @@ def run_sotp(
             **percentiles(sim["e2"]),
             method="Same construction on confidential volume at the assumed confidential take; terminal multiple x "
             "confidential_multiple_haircut because nearstats flags confidential TVL as unverified."
+            + (f" Starting confidential share {calibration.get('confidential_share_start', 0.0):.1%} is an on-chain estimate from Confidential "
+               "Intents Treasury boundary flows (intents_forensics.volume.confidential_share_estimate), not nearstats' rejected split."
+               if calibration.get("confidential_share_status") == "onchain_estimate" else "")
             + ("" if conf_measured else (
                 f" NOT MEASURED this run: the nearstats public/confidential split failed the plausibility guard; the starting confidential "
                 f"share is the registry assumption confidential_share ({calibration.get('confidential_share_start', 0.0):.0%}), so this engine "

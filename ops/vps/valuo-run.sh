@@ -59,6 +59,9 @@ fi
 make sync >/dev/null
 
 if [ "$MODE" = snapshot ]; then
+  # Unattended: let the Chain Signatures sampler outwait NearBlocks' free-tier 429s so all 12 windows return
+  # (an interactive `make reproduce` keeps the 240 s default).
+  export VALUO_CHAINSIG_BUDGET_S="${VALUO_CHAINSIG_BUDGET_S:-900}"
   make reproduce
   make test
   (cd quant && uv run python -m valuo.history snapshot)
@@ -88,6 +91,14 @@ if [ "$MODE" = snapshot ] && [ -n "${VALUO_ANCHOR_ACCOUNT:-}" ]; then
       echo "anchor: written, verify did not match yet (finality lag?); re-check with make anchor-verify"
   else
     echo "anchor: publish failed; snapshot not anchored this run"
+  fi
+  # Falsification alert: any bear trigger that has held for 30 consecutive daily records (summary.json) and has no
+  # record yet is written to <account>/valuo/falsification/<trigger>. Prints one status line per trigger; sends
+  # nothing while no trigger qualifies. Logged, never fatal.
+  if (cd quant && uv run python -m valuo.anchor falsification --account "$VALUO_ANCHOR_ACCOUNT"); then
+    echo "falsification: checked"
+  else
+    echo "falsification: check or write failed; re-run with make falsification-check ANCHOR=$VALUO_ANCHOR_ACCOUNT"
   fi
 fi
 

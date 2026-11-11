@@ -20,6 +20,19 @@ CLI::
     uv run python -m valuo.anchor verify --account A     # check the local manifest against what A anchored on-chain
     uv run python -m valuo.anchor list --account A       # list every anchored snapshot with its write block
     uv run python -m valuo.anchor publish --account A    # sign and send the social.near write (needs A's key)
+    uv run python -m valuo.anchor falsification --account A [--dry-run]   # write falsified bear triggers (needs A's key)
+    uv run python -m valuo.anchor falsification-list --account A [--verify]  # read them back (no key)
+
+Falsification records. The thesis is falsified if a bear trigger holds for 30 consecutive days (streak rules:
+``valuo.history._trigger_runs``). ``falsification`` reads ``artifacts/history/summary.json`` and, for every trigger
+with ``falsified: true`` that has no record yet, writes one compact JSON value under::
+
+    <account>/valuo/falsification/<trigger_key>
+
+in a single ``social.near`` ``set``, through the same signing and sending path as the snapshot anchor. The first
+record for a trigger stands: a later episode does not overwrite it (SocialDB keeps one value per key).
+``falsification-list --verify`` recomputes each record's streak from the local ``snapshots.jsonl`` up to the
+snapshot it names.
 """
 from __future__ import annotations
 
@@ -43,6 +56,9 @@ from valuo.provenance import sha256_file
 
 SOCIAL_CONTRACT = "social.near"
 NAMESPACE = "valuo/snapshot"
+FALSIFICATION_NAMESPACE = "valuo/falsification"
+FALSIFICATION_SCHEMA = "valuo-falsification/1"
+FALSIFICATION_RULE = "thesis falsified if a trigger holds for 30 consecutive days"
 ANCHOR_SCHEMA = "valuo-anchor/1"
 ANCHOR_ACCOUNT_ENV = "VALUO_ANCHOR_ACCOUNT"
 ANCHOR_GAS = 100 * 10**12            # 100 Tgas; a SocialDB set of ~500 bytes uses well under this
@@ -58,6 +74,10 @@ def repo_root() -> Path:
 
 def manifest_path() -> Path:
     return repo_root() / "artifacts" / "manifest.json"
+
+
+def summary_path() -> Path:
+    return repo_root() / "artifacts" / "history" / "summary.json"
 
 
 def anchor_key(generated_at_utc: str) -> str:
@@ -107,14 +127,19 @@ def _rpc(method: str, params: dict[str, Any], url: str | None = None) -> dict[st
 
 def read_anchors(account: str, url: str | None = None) -> dict[str, dict[str, Any]]:
     """Every anchored snapshot under <account>/valuo/snapshot/*, with the block each value was written at."""
-    args = {"keys": [f"{account}/{NAMESPACE}/*"], "options": {"with_block_height": True}}
+    return read_namespace(account, NAMESPACE, url)
+
+
+def read_namespace(account: str, namespace: str, url: str | None = None) -> dict[str, dict[str, Any]]:
+    """Every JSON value under <account>/<namespace>/*, with the block each value was written at (view call, no key)."""
+    args = {"keys": [f"{account}/{namespace}/*"], "options": {"with_block_height": True}}
     res = _rpc("query", {
         "request_type": "call_function", "finality": "final", "account_id": SOCIAL_CONTRACT,
         "method_name": "get", "args_base64": base64.b64encode(json.dumps(args).encode()).decode(),
     }, url)
     tree = json.loads(bytes(res["result"]).decode() or "{}")
     node = tree.get(account, {})
-    for part in NAMESPACE.split("/"):
+    for part in namespace.split("/"):
         node = node.get(part, {}) if isinstance(node, dict) else {}
     out: dict[str, dict[str, Any]] = {}
     for key, leaf in node.items():
@@ -260,10 +285,10 @@ def anchor_deposit(account: str, url: str | None = None) -> int:
     return int(bounds.get("min") or 0) + ANCHOR_DEPOSIT_YOCTO
 
 
-def publish(account: str, manifest_file: Path | None = None, *, url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
-    """Sign and send the social.near `set` for the current manifest; returns the tx hash and final status."""
+def send_set(account: str, args_obj: dict[str, Any], *, url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
+    """Sign and send one social.near `set` with ``args_obj`` as its JSON args; returns the tx hash and final status."""
     seed, pub = load_key(account, keydir)
-    args = json.dumps(set_args(account, manifest_file), separators=(",", ":")).encode()
+    args = json.dumps(args_obj, separators=(",", ":")).encode()
     deposit = anchor_deposit(account, url)
     ak = _rpc("query", {"request_type": "view_access_key", "finality": "final", "account_id": account,
                         "public_key": "ed25519:" + b58encode(pub)}, url)
@@ -281,6 +306,120 @@ def publish(account: str, manifest_file: Path | None = None, *, url: str | None 
             "explorer": f"https://nearblocks.io/txns/{b58encode(digest)}"}
 
 
+def publish(account: str, manifest_file: Path | None = None, *, url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
+    """Sign and send the social.near `set` for the current manifest; returns the tx hash and final status."""
+    return send_set(account, set_args(account, manifest_file), url=url, keydir=keydir)
+
+
+# ---------------------------------------------------------------------------------------------- falsification records
+def _load_triggers(summary_file: Path | None = None) -> dict[str, dict[str, Any]]:
+    summary = json.loads((summary_file or summary_path()).read_text())
+    trig = ((summary.get("snapshots") or {}).get("bear_triggers")) or {}
+    return {k: v for k, v in sorted(trig.items()) if isinstance(v, dict)}
+
+
+def falsification_record(key: str, trig: dict[str, Any]) -> dict[str, Any]:
+    """The value written on-chain for one falsified trigger. Every field is copied from summary.json."""
+    return {
+        "schema": FALSIFICATION_SCHEMA,
+        "trigger": key,
+        "metric": trig.get("metric"),
+        "threshold": trig.get("threshold"),
+        "comparator": trig.get("comparator"),
+        "breached_since_utc": trig.get("breached_since_utc"),
+        "streak_days": trig.get("breached_streak_days"),
+        "observed_days": trig.get("observed_days"),
+        "last_t_utc": trig.get("last_t_utc"),
+        "last_value": trig.get("last_value"),
+        "snapshot_sha256": trig.get("last_snapshot_sha256"),
+        "streak_max_gap_h": trig.get("streak_max_gap_h"),
+        "rule": FALSIFICATION_RULE,
+    }
+
+
+def falsification_set_args(account: str, records: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """JSON args for one social.near `set` writing every record under <account>/valuo/falsification/<trigger_key>."""
+    leaves = {k: json.dumps(v, separators=(",", ":"), sort_keys=True) for k, v in sorted(records.items())}
+    return {"data": {account: {"valuo": {"falsification": leaves}}}}
+
+
+def _num_text(v: Any, spec: str = ".4g") -> str:
+    return format(v, spec) if isinstance(v, (int, float)) and not isinstance(v, bool) else "n/a"
+
+
+def trigger_status_line(key: str, trig: dict[str, Any]) -> str:
+    """One line per trigger: '<key>: breached 0.7 d of 30 ...' / 'clear' / 'not measured'."""
+    days = float(trig.get("falsification_days") or 30)
+    state = trig.get("state_now") or ("breached" if trig.get("breached_now") is True else
+                                      "clear" if trig.get("breached_now") is False else "unmeasured")
+    if trig.get("falsified"):
+        return f"{key}: FALSIFIED, breached {trig.get('breached_streak_days'):.1f} d (>= {days:.0f}) since {trig.get('breached_since_utc')}"
+    if state == "breached":
+        streak = trig.get("breached_streak_days") or 0.0
+        tail = f"since {trig.get('breached_since_utc')}, {trig.get('observed_days')} daily records"
+        if trig.get("gap_reset_at_utc"):
+            tail += f"; streak restarted after a data gap at {trig['gap_reset_at_utc']}"
+        return f"{key}: breached {streak:.1f} d of {days:.0f} ({tail})"
+    if state == "clear":
+        return (f"{key}: clear ({trig.get('metric')} {_num_text(trig.get('last_value'))}, "
+                f"trigger {trig.get('comparator')} {_num_text(trig.get('threshold'))})")
+    return f"{key}: not measured on the latest daily run (streak reset)"
+
+
+def falsification(account: str, summary_file: Path | None = None, *, dry_run: bool = False,
+                  url: str | None = None, keydir: Path | None = None) -> dict[str, Any]:
+    """Write every falsified trigger that has no on-chain record yet. Sends nothing if none qualifies.
+
+    The on-chain read happens only when at least one trigger is falsified, so the common case needs no network."""
+    triggers = _load_triggers(summary_file)
+    lines = [trigger_status_line(k, t) for k, t in triggers.items()]
+    falsified = {k: t for k, t in triggers.items() if t.get("falsified") is True}
+    out: dict[str, Any] = {"account": account, "status": lines, "falsified": sorted(falsified), "already_recorded": [],
+                           "to_publish": [], "args": None, "sent": None, "ok": True, "dry_run": dry_run}
+    if not falsified:
+        return out
+    existing = read_namespace(account, FALSIFICATION_NAMESPACE, url)
+    out["already_recorded"] = sorted(k for k in falsified if k in existing)
+    new = {k: falsification_record(k, t) for k, t in falsified.items() if k not in existing}
+    out["to_publish"] = sorted(new)
+    if not new:
+        return out
+    out["args"] = falsification_set_args(account, new)
+    if dry_run:
+        return out
+    out["sent"] = send_set(account, out["args"], url=url, keydir=keydir)
+    out["ok"] = bool(out["sent"]["ok"])
+    return out
+
+
+def read_falsifications(account: str, url: str | None = None) -> dict[str, dict[str, Any]]:
+    """Every falsification record under <account>/valuo/falsification/*, with its write block (no key)."""
+    return read_namespace(account, FALSIFICATION_NAMESPACE, url)
+
+
+def verify_falsification(value: dict[str, Any] | None, snapshot_records: list[dict[str, Any]]) -> list[str]:
+    """Recompute the streak from local snapshot records up to the snapshot the on-chain record names ([] = consistent)."""
+    from valuo import history
+
+    if not isinstance(value, dict):
+        return ["value is not a JSON object"]
+    sha, key = value.get("snapshot_sha256"), value.get("trigger")
+    hit = next((r for r in snapshot_records if r.get("snapshot_sha256") == sha), None)
+    if hit is None:
+        return [f"snapshot {str(sha)[:16]}... not in local snapshots.jsonl"]
+    cut = history._parse_t(hit.get("t_utc"))
+    upto = [r for r in snapshot_records if (history._parse_t(r.get("t_utc")) or cut) <= cut]
+    runs = history._trigger_runs(history.latest_per_utc_day(upto)).get(str(key))
+    if runs is None:
+        return [f"trigger {key} absent from local history"]
+    problems = []
+    if not runs.get("falsified"):
+        problems.append(f"local recomputation: streak {runs.get('breached_streak_days')} d at that snapshot, not falsified")
+    if runs.get("breached_since_utc") != value.get("breached_since_utc"):
+        problems.append(f"breached_since_utc: local {runs.get('breached_since_utc')!r} != on-chain {value.get('breached_since_utc')!r}")
+    return problems
+
+
 def _account(arg: str | None) -> str:
     acct = arg or os.environ.get(ANCHOR_ACCOUNT_ENV)
     if not acct:
@@ -296,6 +435,13 @@ def main(argv: list[str] | None = None) -> int:
         s.add_argument("--account")
         if name != "list":
             s.add_argument("--manifest", type=Path)
+    f = sub.add_parser("falsification", help="write falsified bear triggers to <account>/valuo/falsification/<key>")
+    f.add_argument("--account")
+    f.add_argument("--summary", type=Path, help="history summary.json (default: artifacts/history/summary.json)")
+    f.add_argument("--dry-run", action="store_true", help="print the status and set args; send nothing, no key needed")
+    fl = sub.add_parser("falsification-list", help="read back <account>/valuo/falsification/* (no key)")
+    fl.add_argument("--account")
+    fl.add_argument("--verify", action="store_true", help="recompute each streak from local snapshots.jsonl")
     a = p.parse_args(argv)
     acct = _account(a.account)
     if a.cmd == "args":
@@ -310,6 +456,40 @@ def main(argv: list[str] | None = None) -> int:
         out = publish(acct, a.manifest)
         print(json.dumps(out, indent=2, default=str))
         return 0 if out["ok"] else 1
+    if a.cmd == "falsification":
+        out = falsification(acct, a.summary, dry_run=a.dry_run)
+        for line in out["status"]:
+            print(line)
+        for k in out["already_recorded"]:
+            print(f"{k}: already recorded at {acct}/{FALSIFICATION_NAMESPACE}/{k}; not rewritten")
+        if not out["falsified"]:
+            print(f"no trigger has held for 30 consecutive days; nothing sent ({acct}/{FALSIFICATION_NAMESPACE}/* unchanged)")
+        elif out["args"] is not None and a.dry_run:
+            print("dry run, would send social.near set:")
+            print(json.dumps(out["args"], separators=(",", ":")))
+        elif out["sent"] is not None:
+            print(json.dumps(out["sent"], indent=2, default=str))
+        return 0 if out["ok"] else 1
+    if a.cmd == "falsification-list":
+        hits = read_falsifications(acct)
+        if not hits:
+            print(f"no records under {acct}/{FALSIFICATION_NAMESPACE}/*")
+            return 0
+        snaps = None
+        if a.verify:
+            from valuo import history
+            snaps = history.read_jsonl(history.history_dir() / "snapshots.jsonl")
+        bad = 0
+        for key, hit in hits.items():
+            v = hit["value"] or {}
+            line = (f"{key}  write_block={hit['write_block_height']}  since={v.get('breached_since_utc')}  "
+                    f"streak={v.get('streak_days')} d  snapshot={str(v.get('snapshot_sha256'))[:16]}...")
+            if snaps is not None:
+                problems = verify_falsification(hit["value"], snaps)
+                bad += bool(problems)
+                line += "  verified" if not problems else "  MISMATCH: " + "; ".join(problems)
+            print(line)
+        return 1 if bad else 0
     res = verify(acct, a.manifest)
     print(json.dumps(res, indent=2))
     return 0 if res["ok"] else 1

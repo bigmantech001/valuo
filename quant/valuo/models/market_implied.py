@@ -457,6 +457,12 @@ def run_market_implied(snapshot: Mapping[str, Any], *, current_fdv_usd: float | 
                "source": "intents_forensics.volume.confidential_share_30d (nearstats totalsBreakdown)", "share_7d": s7, "status": share_status}
               if s30 is not None else None)
         ev_txt = f"; the measured share is {_pct(s30)} (30d)" + (f" and {_pct(s7)} (7d)" if s7 is not None else "") if s30 is not None else ""
+    elif share_status == "onchain_estimate" and s30 is not None:
+        lo, hi = _num(vol.get("confidential_share_low")), _num(vol.get("confidential_share_high"))
+        ev = {"value": s30, "label": "on-chain estimate of the confidential share (Confidential Intents Treasury 24h boundary flow / 24h volume)",
+              "source": "intents_forensics.volume.confidential_share_estimate (NEAR mainnet RPC, treasury NEP-245 balances)",
+              "status": share_status, "range": [lo, hi] if lo is not None and hi is not None else None}
+        ev_txt = f"; the on-chain estimate today is {_pct(s30)}" + (f" (band {_pct(lo)}-{_pct(hi)})" if lo is not None and hi is not None else "")
     else:
         # The split guard substituted the registry assumption (or the split is missing): this is not evidence, and the
         # row must not read as "measured". within_evidence is then a comparison against an assumption, labelled as such.

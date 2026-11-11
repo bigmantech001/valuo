@@ -149,3 +149,111 @@ def test_load_key_rejects_mismatched_pair(tmp_path: Path):
                                           "private_key": "ed25519:" + anchor.b58encode(RFC8032_SEED + RFC8032_PUB)}))
     with pytest.raises(ValueError):
         anchor.load_key("x", d)
+
+
+# ------------------------------------------------------------------------------------------------- falsification records
+def _trigger(falsified: bool, *, state: str = "breached", streak: float | None = 31.0, since: str | None = "2026-10-01T06:00:00Z") -> dict:
+    return {"metric": "max_inflation_rate", "threshold": 0.016, "comparator": ">", "state_now": state,
+            "breached_now": state == "breached" if state != "unmeasured" else None, "breached_since_utc": since,
+            "breached_streak_days": streak, "observed_days": 32, "last_t_utc": "2026-11-01T06:00:00Z", "last_value": 0.025,
+            "last_snapshot_sha256": "c" * 64, "gap_reset_at_utc": None, "falsified": falsified,
+            "streak_max_gap_h": 36.0, "falsification_days": 30.0}
+
+
+def _summary_file(tmp_path: Path, triggers: dict) -> Path:
+    p = tmp_path / "summary.json"
+    p.write_text(json.dumps({"snapshots": {"bear_triggers": triggers}}))
+    return p
+
+
+def _no_network(*a, **k):
+    raise AssertionError("no RPC call expected")
+
+
+def test_falsification_nothing_falsified_sends_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(anchor, "_rpc", _no_network)
+    path = _summary_file(tmp_path, {
+        "governance_stalemate": _trigger(False, streak=1.0),
+        "fee_race_to_zero": _trigger(False, state="clear", streak=None, since=None),
+        "solver_cartelization": _trigger(False, state="unmeasured", streak=None, since=None),
+    })
+    out = anchor.falsification("valuo.near", path)
+    assert out["falsified"] == [] and out["sent"] is None and out["args"] is None and out["ok"]
+    assert out["status"][1].startswith("governance_stalemate: breached 1.0 d of 30")
+    assert out["status"][0].startswith("fee_race_to_zero: clear") and "not measured" in out["status"][2]
+
+
+def test_falsification_dry_run_builds_args_without_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    calls = []
+
+    def fake_rpc(method, params, url=None):
+        calls.append((method, params.get("method_name")))
+        assert method == "query" and params["method_name"] == "get"
+        return {"result": list(b"{}")}
+
+    monkeypatch.setattr(anchor, "_rpc", fake_rpc)
+    monkeypatch.setattr(anchor, "load_key", _no_network)
+    path = _summary_file(tmp_path, {"governance_stalemate": _trigger(True), "fee_race_to_zero": _trigger(False, state="clear")})
+    out = anchor.falsification("valuo.near", path, dry_run=True)
+    assert out["to_publish"] == ["governance_stalemate"] and out["sent"] is None and calls == [("query", "get")]
+    leaf = out["args"]["data"]["valuo.near"]["valuo"]["falsification"]
+    assert list(leaf) == ["governance_stalemate"]
+    rec = json.loads(leaf["governance_stalemate"])
+    assert rec["trigger"] == "governance_stalemate" and rec["snapshot_sha256"] == "c" * 64 and rec["streak_days"] == 31.0
+    assert rec["breached_since_utc"] == "2026-10-01T06:00:00Z" and rec["rule"] == anchor.FALSIFICATION_RULE
+    assert rec["comparator"] == ">" and rec["threshold"] == 0.016 and rec["last_value"] == 0.025
+    assert "FALSIFIED" in out["status"][1]
+
+
+def test_falsification_skips_already_recorded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    existing = json.dumps({"trigger": "governance_stalemate"})
+    monkeypatch.setattr(anchor, "_rpc", lambda method, params, url=None: {"result": list(json.dumps(
+        {"valuo.near": {"valuo": {"falsification": {"governance_stalemate": {":block": 5, "": existing}}}}}).encode())})
+    monkeypatch.setattr(anchor, "send_set", _no_network)
+    out = anchor.falsification("valuo.near", _summary_file(tmp_path, {"governance_stalemate": _trigger(True)}))
+    assert out["already_recorded"] == ["governance_stalemate"] and out["to_publish"] == [] and out["sent"] is None
+
+
+def test_falsification_publish_uses_anchor_signing_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import base64 as b64
+    import hashlib
+
+    keys = _keyfile(tmp_path, "valuo.near")
+    sent: dict = {}
+
+    def fake_rpc(method, params, url=None):
+        if method == "query" and params["request_type"] == "call_function":
+            reply = {"get": b"{}", "storage_balance_of": b'{"total":"1","available":"0"}'}[params["method_name"]]
+            return {"result": list(reply)}
+        if method == "query":
+            return {"nonce": 9, "block_hash": anchor.b58encode(bytes(32))}
+        assert method == "send_tx"
+        sent.update(params)
+        return {"status": {"SuccessValue": ""}}
+
+    monkeypatch.setattr(anchor, "_rpc", fake_rpc)
+    out = anchor.falsification("valuo.near", _summary_file(tmp_path, {"solver_cartelization": _trigger(True)}), keydir=keys)
+    raw = b64.b64decode(sent["signed_tx_base64"])
+    tx, sig = raw[:-65], raw[-64:]
+    assert anchor.ed25519_verify(RFC8032_PUB, hashlib.sha256(tx).digest(), sig)
+    assert b'"valuo.near":{"valuo":{"falsification":{"solver_cartelization"' in tx
+    assert int.from_bytes(tx[-16:], "little") == anchor.ANCHOR_DEPOSIT_YOCTO   # storage already registered
+    assert out["ok"] and out["sent"]["tx_hash"] == anchor.b58encode(hashlib.sha256(tx).digest())
+
+
+def test_read_and_verify_falsification(monkeypatch: pytest.MonkeyPatch):
+    from datetime import datetime, timedelta, timezone
+
+    t0 = datetime(2026, 10, 1, 6, tzinfo=timezone.utc)
+    snaps = [{"t_utc": (t0 + timedelta(days=d)).strftime("%Y-%m-%dT%H:%M:%SZ"), "snapshot_sha256": f"{d:064d}",
+              "bear_triggers": [{"key": "g", "metric": "m", "threshold": 1, "comparator": ">", "current_value": 2, "breached": True}]}
+             for d in range(32)]
+    good = {"trigger": "g", "snapshot_sha256": f"{30:064d}", "breached_since_utc": snaps[0]["t_utc"]}
+    tree = {"valuo.near": {"valuo": {"falsification": {"g": {":block": 77, "": json.dumps(good)}}}}}
+    monkeypatch.setattr(anchor, "_rpc", lambda method, params, url=None: {"result": list(json.dumps(tree).encode())})
+    hits = anchor.read_falsifications("valuo.near")
+    assert hits["g"]["write_block_height"] == 77 and hits["g"]["value"] == good
+    assert anchor.verify_falsification(hits["g"]["value"], snaps) == []
+    early = {**good, "snapshot_sha256": f"{20:064d}"}            # only 20 days by then
+    assert any("not falsified" in p for p in anchor.verify_falsification(early, snaps))
+    assert any("not in local" in p for p in anchor.verify_falsification({**good, "snapshot_sha256": "x"}, snaps))

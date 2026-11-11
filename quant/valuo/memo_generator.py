@@ -226,6 +226,19 @@ def _section_verdict(snap: Snapshot) -> str:
         cal["volume_terminal_median_usd_day"] / cal["volume_terminal_mean_usd_day"]
         if _finite(cal.get("volume_terminal_median_usd_day")) is not None and _finite(cal.get("volume_terminal_mean_usd_day")) else None
     )
+    vg = getattr(snap, "volume_growth", None) or {}
+    if isinstance(vg, dict) and vg.get("status") == "measured" and vg.get("ci90"):
+        xc = vg.get("cross_checks") or {}
+        vg_cross = ", ".join(f"{k.replace('_', ' ')} {fmt_pct(_finite((v or {}).get('value')), 0, signed=True)}" for k, v in xc.items())
+        lines.append(
+            f"**Volume growth is measured, not assumed.** Trend growth of NEAR Intents daily volume over {vg.get('first_day')} to {vg.get('last_day')} "
+            f"({fmt_int(vg.get('n_days'))} days, DefiLlama): {fmt_pct(_finite(vg.get('growth_yoy')), 1, signed=True)}/yr, 90% CI "
+            f"{fmt_pct(_finite(vg['ci90'][0]), 0, signed=True)} to {fmt_pct(_finite(vg['ci90'][1]), 0, signed=True)} (OLS of log volume on time, Newey-West errors). "
+            + ("The model uses it as public_volume_growth_yoy, with the CI as its range; " if vg.get("used_in_model") else f"Not used this run ({vg.get('note')}); ")
+            + "it is the median trend, so reading it as expected growth is conservative."
+            + (f" Cross-checks, not used: {vg_cross}." if vg_cross else "")
+        )
+        lines.append("")
     lines.append(
         f"**Why the P50 is below the deterministic value.** The volume and price processes are mean-matching GBMs (Ito drift), so the labeled "
         f"{fmt_pct(_finite((sotp.inputs.get('public_volume_growth_yoy') or {}).value if 'public_volume_growth_yoy' in sotp.inputs else None), 0, signed=True)} YoY "
@@ -656,6 +669,7 @@ def _section_sotp(snap: Snapshot) -> str:
         ["Compression lambda (public / confidential)", f"{fmt_num(cal.get('lambda_pub_monthly'), 3)} / {fmt_num(cal.get('lambda_conf_monthly'), 3)} per month", "geometric reversion to the floor"],
         ["Volume growth (public / confidential, monthly)", f"{fmt_pct(cal.get('growth_monthly_pub'), 2)} / {fmt_pct(cal.get('growth_monthly_conf'), 2)}", f"confidential share {fmt_pct(cal.get('confidential_share_start'), 1)} -> {fmt_pct(cal.get('confidential_share_target'), 0)} target"
          + (" (start share ASSUMED: registry confidential_share; nearstats split failed the plausibility guard)" if cal.get("confidential_share_status") == "implausible_fallback"
+            else " (start share ESTIMATED ON-CHAIN from Confidential Intents Treasury boundary flows)" if cal.get("confidential_share_status") == "onchain_estimate"
             else " (start share not measured: split unavailable, credited 0)" if cal.get("confidential_engine_measured") is False else " (start share measured)")],
         ["Sigma: price (annual) / volume (monthly)", f"{fmt_num(cal.get('sigma_price_annual'), 3)} / {fmt_num(cal.get('sigma_volume_monthly'), 3)}", f"{cal.get('sigma_volume_source')}; confidential sigma x {fmt_num(cal.get('confidential_sigma_multiplier'), 2)}"],
         ["Terminal multiple (FDV / annual holder revenue)", f"{fmt_mult(cal.get('terminal_multiple_used'))} (raw {fmt_mult(cal.get('terminal_multiple_raw'))})",
@@ -998,6 +1012,17 @@ def _confidential_status_core(snap: Snapshot) -> str:
             f"-{fmt_pct(next((a.high for a in snap.assumptions if a.key == 'confidential_share'), None), 0)}), so Engine 2 "
             f"({fmt_usd(((cal.get('deterministic_base') or {}).get('engine_confidential')))} of the {fmt_usd(((cal.get('deterministic_base') or {}).get('fdv_total')))} "
             "expected-path FDV) values an assumed volume."
+        )
+    if status == "onchain_estimate":
+        est = vol.get("confidential_share_estimate") or {}
+        return (
+            f"Confidential share: ESTIMATED ON-CHAIN at {fmt_pct(share, 1)} (band {fmt_pct(_finite(vol.get('confidential_share_low')), 1)}-"
+            f"{fmt_pct(_finite(vol.get('confidential_share_high')), 1)}). nearstats reported {fmt_pct(reported, 4)}, which its own payload contradicts, so "
+            f"the share is read from the Confidential Intents Treasury instead: 24h inflow {fmt_usd(_finite(est.get('flow_in_24h_usd')))}, outflow "
+            f"{fmt_usd(_finite(est.get('flow_out_24h_usd')))}, against 24h volume {fmt_usd(_finite(est.get('volume_24h_usd')))}. Same-hour netting and in-shard "
+            "turnover bias it down, solver inventory up; one 24h window. Engine 2 "
+            f"({fmt_usd(((cal.get('deterministic_base') or {}).get('engine_confidential')))} of the {fmt_usd(((cal.get('deterministic_base') or {}).get('fdv_total')))} "
+            "expected-path FDV) is valued on this estimate, not on the 40% registry assumption."
         )
     if status == "unavailable":
         return "Confidential share: not measured (nearstats split missing); Engine 2 is credited zero confidential volume."
@@ -1485,6 +1510,8 @@ def render_readme_findings(snapshot: Snapshot | Mapping[str, Any], manifest: Man
             "NEAR Intents 30d volume (public / confidential)",
             f"{fmt_usd(vol.get('30d'))} ({fmt_usd(vol.get('public30d'))} / {fmt_usd(vol.get('confidential30d'))}; confidential share {fmt_pct(vol.get('confidential_share_30d'), 1)})",
             ("nearstats `intents.totalsBreakdown`; DefiLlama dexs chart agrees day-for-day" if (vol.get("confidential_share_status") in (None, "measured"))
+             else f"total: nearstats / DefiLlama; confidential share ESTIMATED ON-CHAIN (`onchain_estimate`): {vol.get('confidential_share_source')}"
+             if vol.get("confidential_share_status") == "onchain_estimate"
              else f"confidential share status `{vol.get('confidential_share_status')}`: NOT MEASURED; {vol.get('confidential_share_source') or 'no split'}"),
         ),
         _row(

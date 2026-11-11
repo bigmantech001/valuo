@@ -920,3 +920,34 @@ def test_solver_walk_paces_in_chunks(ledger: ProvenanceLedger, probes_dir: Path,
     assert out["pages_ok"] == 7 and [m["page"] for m in out["strata"]] == [1, 2, 3, 4, 5, 6, 7]
     big = [s for s in sleeps if s > 30]
     assert len(big) == 1 and big[0] == pytest.approx(62.0, abs=1.0) and out["pacing_wait_s"] == pytest.approx(big[0])
+
+
+def test_split_guard_uses_onchain_treasury_estimate_when_boundary_is_measured(load_fixture):
+    """With the treasury boundary audit present, the rejected split is replaced by an on-chain estimate, not the assumption."""
+    from valuo import assumptions as A
+    from valuo.collectors.intents_forensics import (
+        SPLIT_STATUS_ONCHAIN, confidential_split_guard, extract_protocol_metrics, extract_volume, onchain_share_estimate,
+    )
+
+    summary = load_fixture("nearstats_summary_split_collapsed.json")
+    warnings: list[str] = []
+    vol = extract_volume(summary, None, warnings)
+    metrics = extract_protocol_metrics(summary, warnings)
+    v24 = vol["24h"]
+    boundary = {"status": "measured", "flow_24h_in_lower_bound_usd": 0.14 * v24, "flow_24h_out_lower_bound_usd": 0.11 * v24,
+                "flow_window": {"start_time_utc": "2026-11-10T06:05:00Z", "end_time_utc": "2026-11-11T06:05:08Z"}, "block_height": 1}
+    out = confidential_split_guard(vol, summary, metrics, warnings, boundary=boundary)
+    assert out["confidential_share_status"] == SPLIT_STATUS_ONCHAIN and out["confidential_share_measured"] is False
+    assert out["confidential_share_30d"] == pytest.approx(0.14 / 1.14)
+    assert out["confidential_share_low"] == pytest.approx(0.11 / 1.11) and out["confidential_share_high"] == pytest.approx(0.14)
+    assert out["confidential_share_low"] <= out["confidential_share_30d"] <= out["confidential_share_high"]
+    assert out["confidential_share_30d"] != A.value("confidential_share") and out["confidential_share_source"].startswith("on-chain estimate")
+    chain = out["confidential_share_fallback_chain"]
+    assert chain[-2]["result"].startswith("USED") and chain[-1]["result"].startswith("not used")
+    assert out["public30d"] is None and out["split_reported"]["confidential30d"] is not None
+    assert any("ESTIMATED ON-CHAIN" in w for w in warnings) and not any(w.startswith("CONFIDENTIAL SPLIT IMPLAUSIBLE") for w in warnings)
+    # missing pieces -> no estimate (the guard then falls back to the labelled assumption)
+    assert onchain_share_estimate(None, vol) is None
+    assert onchain_share_estimate({**boundary, "flow_24h_out_lower_bound_usd": None}, vol) is None
+    assert onchain_share_estimate({**boundary, "status": "unavailable"}, vol) is None
+    assert onchain_share_estimate(boundary, {"24h": 0}) is None

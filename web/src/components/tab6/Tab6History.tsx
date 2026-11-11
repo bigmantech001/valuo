@@ -3,13 +3,14 @@ import { MethodNote, SectionIntro, StatGrid } from "@/components/ui/Section";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ARCHETYPE_LABELS } from "@/lib/corridors";
 import { fmtBps, fmtInt, fmtPct, fmtUsdCompact, fmtUtc } from "@/lib/format";
-import type { HistoryLoad, SeriesBlock, SeriesStats } from "@/lib/history";
+import { anchorAccount, type HistoryLoad, type SeriesBlock, type SeriesStats } from "@/lib/history";
 import { COLORS, SERIES_COLORS } from "@/lib/theme";
 import type { CorridorArchetype, Snapshot } from "@/lib/types";
 import { BacktestPanel } from "./BacktestPanel";
 import { fmtDay, fmtSpan, plural, spanMs, statsOf, type WorkflowSchedule } from "./derive";
 import { HistoryChartCard, type RunCount } from "./HistoryChartCard";
 import { RaceCellTable } from "./RaceCellTable";
+import { RouteWinLossTable } from "./RouteWinLossTable";
 import type { TimePoint, TimeSeries } from "./TimeChart";
 import { TriggerHistoryTable } from "./TriggerHistoryTable";
 
@@ -117,6 +118,7 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
   }
   const raceSpan = fmtSpan(spanMs(bench.first_t_utc, bench.last_t_utc));
   const snapSpan = fmtSpan(spanMs(snaps.first_t_utc, snaps.last_t_utc));
+  const streakGapH = Object.values(snaps.bear_triggers).find((t) => typeof t.streak_max_gap_h === "number")?.streak_max_gap_h ?? null;
 
   const titles: Record<string, string> = {};
   for (const sc of snapshot?.bear_case?.scenarios ?? []) if (sc?.key && sc.title) titles[sc.key] = sc.title;
@@ -171,6 +173,7 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
       </div>
 
       <section className="space-y-6">
+        <RouteWinLossTable routes={bench.routes} />
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <HistoryChartCard
             kicker="Hourly quote race"
@@ -261,7 +264,7 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
             }}
           />
         </div>
-        <TriggerHistoryTable triggers={snaps.bear_triggers} titles={titles} />
+        <TriggerHistoryTable triggers={snaps.bear_triggers} titles={titles} account={anchorAccount()} />
       </section>
 
       <BacktestPanel backtest={snapshot?.backtest} />
@@ -301,7 +304,8 @@ export function Tab6History({ history, snapshot, schedules }: Tab6Props) {
         <p>
           Statistics: {sum.ci_method ?? "no CI method recorded"}. Medians, ranges and changes are over non-null observations in time order; a run that did not measure a metric leaves a gap rather than a zero. Race
           headroom per archetype is the median over cells with a 1Click quote and at least one competitor quote; snapshot series are the values of the canonical <code>latest_snapshot.json</code> of each day. Trigger
-          streaks use the trigger&apos;s own breach flag from <code>bear_case.scenarios</code> in each run.
+          streaks use the trigger&apos;s own breach flag from <code>bear_case.scenarios</code> in each run
+          {streakGapH !== null ? `; a streak is continuous only while consecutive daily records are at most ${fmtInt(streakGapH)} h apart, and a record where the trigger was not measured ends it` : ""}.
         </p>
         <p>
           Add points locally: <code>make bench-history</code> runs one live race (all corridors and clips, zero API keys) and appends it; <code>make history</code> appends the current canonical snapshot;{" "}

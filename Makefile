@@ -1,4 +1,4 @@
-.PHONY: reproduce reproduce-fast test test-live invariants dev build bench clean clean-dev sync history bench-history history-summary history-verify anchor-verify anchor-list
+.PHONY: reproduce reproduce-fast test test-live invariants dev build bench clean clean-dev sync history bench-history history-summary history-verify anchor-verify anchor-list falsification-check falsification-list
 
 # Full live reproduction (the only configuration that writes the CANONICAL artifacts/): fetch NEAR mainnet state +
 # router quotes, run the 10,000-path Monte Carlo (seed 20261114), write artifacts/{latest_snapshot.json,manifest.json,
@@ -68,3 +68,13 @@ anchor-verify:
 
 anchor-list:
 	cd quant && uv run python -m valuo.anchor list --account "$(ANCHOR)"
+
+# Thesis-falsification alert (NEAR mainnet SocialDB, <account>/valuo/falsification/<trigger>). Dry run: per-trigger
+# streak status from artifacts/history/summary.json and the `set` args it would send; no key, nothing sent.
+#   make falsification-check ANCHOR=<account>
+falsification-check:
+	cd quant && uv run python -m valuo.anchor falsification --account "$(ANCHOR)" --dry-run
+
+# Read back every falsification record and recompute its streak from local snapshots.jsonl (no key).
+falsification-list:
+	cd quant && uv run python -m valuo.anchor falsification-list --account "$(ANCHOR)" --verify

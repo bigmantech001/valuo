@@ -8,7 +8,9 @@ Files (all under ``artifacts/history/``, committed to the repository):
   ``t_utc``. Every venue response is persisted gzip-compressed under ``raw/<YYYYMMDDTHHMMSSZ>/`` and the record keeps
   the SHA-256 of the exact *uncompressed* response bytes (verify with ``gunzip -c f.json.gz | shasum -a 256`` or
   ``python -m valuo.history verify``).
-- ``summary.json``     series + robust statistics per metric for the web History view (``summarize``).
+- ``summary.json``     series + robust statistics per metric for the web History view (``summarize``), the 1Click
+  win/loss record per route (``bench.routes``: Wilson 90% CI, ties |headroom| < 0.01 bps excluded) and the per-trigger
+  falsification streak (``snapshots.bear_triggers``: a gap > 36 h between daily records or an unmeasured day resets it).
 
 CLI::
 
@@ -43,7 +45,7 @@ __all__ = [
     "SNAPSHOT_SCHEMA", "BENCH_SCHEMA", "SUMMARY_SCHEMA", "HISTORY_DIRNAME",
     "history_dir", "record_from_snapshot", "record_from_bench", "append", "read_jsonl",
     "series_stats", "summarize", "write_summary", "record_canonical_run", "run_bench", "verify_bench_raw",
-    "merge_from", "main",
+    "merge_from", "main", "wilson_interval", "classify_race", "STREAK_MAX_GAP_H", "FALSIFICATION_DAYS", "TIE_BPS",
 ]
 
 SNAPSHOT_SCHEMA = "valuo.history.snapshot/1"
@@ -55,6 +57,16 @@ CI_MIN_N = 5  # below this a percentile CI of the median is not reported (null)
 # Hourly quote races: modest concurrency for free endpoints (the canonical pipeline uses 8).
 BENCH_CONCURRENCY = 4
 BENCH_BUDGET_S = 60.0
+# Falsification streaks (snapshot series, thinned to the latest record per UTC day). A breach streak is continuous
+# only while consecutive daily records are at most STREAK_MAX_GAP_H apart: a missed daily run (one day skipped is
+# already ~48 h) resets the streak to the record after the gap, so unobserved days never count toward the 30.
+STREAK_MAX_GAP_H = 36.0
+FALSIFICATION_DAYS = 30.0
+FALSIFICATION_RULE = "thesis falsified if a trigger holds for 30 consecutive days"
+# Win/loss record of 1Click per route. headroom_bps = (out_1click - out_best_competitor) / out_best_competitor x 1e4
+# on destination units; |headroom| < TIE_BPS is a tie (excluded from wins and losses, reported separately).
+TIE_BPS = 0.01
+WILSON_Z90 = 1.6448536269514722  # two-sided 90%: Phi^-1(0.95)
 
 
 # ----------------------------------------------------------------------------- paths / getters
@@ -453,35 +465,79 @@ def _sorted_by_t(records: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]
     return sorted((r for r in records if _parse_t(r.get("t_utc")) is not None), key=lambda r: _parse_t(r["t_utc"]))
 
 
+def _streak_break(prev: tuple[Any, ...] | None, cur_t: str) -> str | None:
+    """Why the breach streak does not extend back past ``cur_t`` (None = it does)."""
+    if prev is None:
+        return "start_of_history"
+    if prev[2] is None:
+        return "unmeasured"
+    if prev[2] is not True:
+        return "clear"
+    a, b = _parse_t(prev[0]), _parse_t(cur_t)
+    if a is None or b is None or (b - a).total_seconds() > STREAK_MAX_GAP_H * 3600:
+        return "gap"
+    return None
+
+
 def _trigger_runs(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Per bear trigger: value/breach points, and the current consecutive-breach streak (falsification needs 30 days)."""
-    by_key: dict[str, list[tuple[str, Any, Any]]] = {}
+    """Per bear trigger: value/breach points, and the current consecutive-breach streak (falsification needs 30 days).
+
+    Streak rules (``records`` are the daily-thinned snapshot records, oldest first):
+    - only ``breached is True`` extends a streak; ``False`` (clear) and ``None`` (trigger not evaluated: unmeasured)
+      both end it, so a day the trigger could not be measured never counts as a breached day;
+    - consecutive breached records more than STREAK_MAX_GAP_H apart are not continuous: the streak restarts at the
+      record after the gap (``gap_reset_at_utc``);
+    - ``breached_streak_days`` = elapsed time from the first to the last record of the current streak (one record = 0 d);
+      ``observed_days`` = records (UTC days) inside it; ``falsified`` = streak >= FALSIFICATION_DAYS.
+    """
+    by_key: dict[str, list[tuple[str, float | None, Any, Any]]] = {}
     meta: dict[str, dict[str, Any]] = {}
     for r in records:
         for trig in r.get("bear_triggers") or []:
             if not isinstance(trig, Mapping) or not trig.get("key"):
                 continue
-            by_key.setdefault(trig["key"], []).append((r["t_utc"], _num(trig.get("current_value")), trig.get("breached")))
+            breached = trig.get("breached")
+            breached = breached if isinstance(breached, bool) else None
+            by_key.setdefault(trig["key"], []).append((r["t_utc"], _num(trig.get("current_value")), breached,
+                                                       r.get("snapshot_sha256")))
             meta[trig["key"]] = {k: trig.get(k) for k in ("metric", "threshold", "comparator")}
     out: dict[str, Any] = {}
     for key, pts in by_key.items():
-        streak_start = None
-        for t, _v, breached in reversed(pts):
-            if breached is True:
-                streak_start = t
-            else:
-                break
-        last_t = _parse_t(pts[-1][0])
-        start_dt = _parse_t(streak_start)
+        last = pts[-1]
+        start_idx: int | None = None
+        broken_by: str | None = None
+        if last[2] is True:
+            start_idx = len(pts) - 1
+            while True:
+                broken_by = _streak_break(pts[start_idx - 1] if start_idx > 0 else None, pts[start_idx][0])
+                if broken_by is not None:
+                    break
+                start_idx -= 1
+        streak_start = pts[start_idx][0] if start_idx is not None else None
+        last_dt, start_dt = _parse_t(last[0]), _parse_t(streak_start)
+        streak_days = round((last_dt - start_dt).total_seconds() / 86400.0, 3) if last_dt and start_dt else None
+        state = "breached" if last[2] is True else ("clear" if last[2] is False else "unmeasured")
         out[key] = {
             **meta[key],
-            "points": [[t, v, b] for t, v, b in pts],
+            "points": [[t, v, b] for t, v, b, _sha in pts],
             "n_runs": len(pts),
-            "n_breached": sum(1 for _t, _v, b in pts if b is True),
-            "breached_now": pts[-1][2],
+            "n_breached": sum(1 for p in pts if p[2] is True),
+            "n_unmeasured": sum(1 for p in pts if p[2] is None),
+            "breached_now": last[2],
+            "state_now": state,
+            "last_t_utc": last[0],
+            "last_value": last[1],
+            "last_snapshot_sha256": last[3],
             "breached_since_utc": streak_start,
-            "breached_streak_days": round((last_t - start_dt).total_seconds() / 86400.0, 3) if last_t and start_dt else None,
-            "falsification_rule": "thesis falsified if a trigger holds for 30 consecutive days",
+            "breached_streak_days": streak_days,
+            "observed_days": (len(pts) - start_idx) if start_idx is not None else 0,
+            "streak_broken_by": broken_by,
+            "gap_reset_at_utc": streak_start if broken_by == "gap" else None,
+            "days_to_falsification": round(max(0.0, FALSIFICATION_DAYS - (streak_days or 0.0)), 3),
+            "falsified": bool(streak_days is not None and streak_days >= FALSIFICATION_DAYS),
+            "streak_max_gap_h": STREAK_MAX_GAP_H,
+            "falsification_days": FALSIFICATION_DAYS,
+            "falsification_rule": FALSIFICATION_RULE,
         }
     return out
 
@@ -526,6 +582,130 @@ def _summarize_snapshots(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]
 def _cell_id(cell: Mapping[str, Any]) -> str:
     clip = _num(cell.get("clip_usd"))
     return f"{cell.get('corridor_id')}@{int(clip) if clip is not None else 'na'}"
+
+
+def wilson_interval(wins: int, n: int, z: float = WILSON_Z90) -> list[float] | None:
+    """Wilson score interval for a binomial proportion wins/n (None when n == 0)."""
+    if n <= 0:
+        return None
+    p = wins / n
+    denom = 1.0 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return [max(0.0, centre - half), min(1.0, centre + half)]
+
+
+def classify_race(cell: Mapping[str, Any]) -> tuple[str, str | None]:
+    """One (run, corridor, clip) quote cell -> ("win"|"loss"|"tie", None) or ("excluded", reason).
+
+    A cell is a contest only if 1Click quoted ok AND at least one competitor quoted ok (then headroom is defined).
+    Exclusion reasons: oneclick_not_ok, no_competitor_ok, headroom_missing."""
+    venues = cell.get("venues") if isinstance(cell.get("venues"), Mapping) else {}
+    if cell.get("oneclick_status") != "ok":
+        return "excluded", "oneclick_not_ok"
+    if not any(v != "1click" and isinstance(q, Mapping) and q.get("status") == "ok" for v, q in venues.items()):
+        return "excluded", "no_competitor_ok"
+    h = _num(cell.get("headroom_bps"))
+    if h is None:
+        return "excluded", "headroom_missing"
+    if abs(h) < TIE_BPS:
+        return "tie", None
+    return ("win" if h > 0 else "loss"), None
+
+
+def _route_block(races: Sequence[tuple[str, Mapping[str, Any]]]) -> dict[str, Any]:
+    """Win/loss record over (t_utc, cell) pairs. Win rate = wins / (wins + losses); ties reported, not counted."""
+    wins: list[float] = []
+    losses: list[float] = []
+    ties = 0
+    excluded: dict[str, int] = {}
+    beaten_by: dict[str, int] = {}
+    times: list[datetime] = []
+    for t, cell in races:
+        outcome, reason = classify_race(cell)
+        if outcome == "excluded":
+            excluded[reason or "unknown"] = excluded.get(reason or "unknown", 0) + 1
+            continue
+        dt = _parse_t(t)
+        if dt is not None:
+            times.append(dt)
+        h = float(_num(cell.get("headroom_bps")))  # defined for every non-excluded cell
+        if outcome == "tie":
+            ties += 1
+        elif outcome == "win":
+            wins.append(h)
+        else:
+            losses.append(h)
+            who = str(cell.get("best_competitor"))
+            beaten_by[who] = beaten_by.get(who, 0) + 1
+    decided = len(wins) + len(losses)
+    top = sorted(beaten_by.items(), key=lambda kv: (-kv[1], kv[0]))
+    first, last = (min(times), max(times)) if times else (None, None)
+    return {
+        "races": decided + ties,
+        "wins": len(wins),
+        "losses": len(losses),
+        "ties": ties,
+        "decided": decided,
+        "win_rate": len(wins) / decided if decided else None,
+        "win_rate_ci90": wilson_interval(len(wins), decided),
+        "median_headroom_bps_wins": float(np.median(wins)) if wins else None,
+        "median_headroom_bps_losses": float(np.median(losses)) if losses else None,
+        "beaten_by_counts": dict(top),
+        "top_beaten_by": top[0][0] if top else None,
+        "top_beaten_by_n": top[0][1] if top else 0,
+        "excluded": sum(excluded.values()),
+        "excluded_reasons": dict(sorted(excluded.items())),
+        "first_t_utc": first.strftime("%Y-%m-%dT%H:%M:%SZ") if first else None,
+        "last_t_utc": last.strftime("%Y-%m-%dT%H:%M:%SZ") if last else None,
+        "span_days": round((last - first).total_seconds() / 86400.0, 3) if first and last else None,
+    }
+
+
+def _summarize_routes(recs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """1Click win/loss record per route (corridor, all clips pooled), per cell (corridor x clip) and overall."""
+    by_corridor: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
+    by_cell: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
+    meta: dict[str, dict[str, Any]] = {}
+    overall: list[tuple[str, Mapping[str, Any]]] = []
+    for r in recs:
+        for cell in r.get("cells") or []:
+            if not isinstance(cell, Mapping) or not cell.get("corridor_id"):
+                continue
+            cid = str(cell["corridor_id"])
+            pair = (r["t_utc"], cell)
+            overall.append(pair)
+            by_corridor.setdefault(cid, []).append(pair)
+            by_cell.setdefault(_cell_id(cell), []).append(pair)
+            m = meta.setdefault(cid, {"archetype": cell.get("archetype"), "clips_usd": []})
+            clip = _num(cell.get("clip_usd"))
+            if clip is not None and clip not in m["clips_usd"]:
+                m["clips_usd"].append(clip)
+    corridors = {cid: {"corridor_id": cid, "archetype": meta[cid]["archetype"], "clips_usd": sorted(meta[cid]["clips_usd"]),
+                       **_route_block(by_corridor[cid])} for cid in sorted(by_corridor)}
+    cells = {}
+    for cell_id in sorted(by_cell):
+        sample = by_cell[cell_id][0][1]
+        cells[cell_id] = {"corridor_id": sample.get("corridor_id"), "clip_usd": _num(sample.get("clip_usd")),
+                          **_route_block(by_cell[cell_id])}
+    return {
+        "method": {
+            "unit": "one race = one (hourly run, corridor, clip) quote cell; a route pools its clips",
+            "contest_rule": "counted only if 1Click quoted ok and at least one competitor quoted ok",
+            "outcome_rule": (f"win: headroom_bps >= +{TIE_BPS}; loss: headroom_bps <= -{TIE_BPS}; "
+                             f"tie: |headroom_bps| < {TIE_BPS} (reported, excluded from wins and losses)"),
+            "headroom_definition": "(out_1click - out_best_competitor) / out_best_competitor x 1e4, destination units",
+            "win_rate": "wins / (wins + losses)",
+            "ci": ("90% Wilson score interval on the win rate (z = 1.645). It treats races as independent; hourly races "
+                   "on one route are autocorrelated and the clips of one run share a market state, so the true "
+                   "uncertainty is wider than shown"),
+            "beaten_by": "best_competitor of each loss (the venue that delivered the most)",
+            "tie_bps": TIE_BPS,
+        },
+        "overall": {"n_routes": len(corridors), "n_runs": len(recs), **_route_block(overall)},
+        "by_corridor": corridors,
+        "by_cell": cells,
+    }
 
 
 def _summarize_bench(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -583,6 +763,7 @@ def _summarize_bench(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "last_t_utc": recs[-1]["t_utc"] if recs else None,
         "series": series,
         "cells": cells,
+        "routes": _summarize_routes(recs),
     }
 
 

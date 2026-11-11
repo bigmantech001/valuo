@@ -261,3 +261,115 @@ def test_summary_keeps_latest_run_per_utc_day():
     out = history.summarize({"snapshots": recs, "bench": []})["snapshots"]
     assert out["n_records"] == 2 and out["n_records_total"] == 3 and out["n_same_day_reruns_dropped"] == 1
     assert [p[1] for p in out["series"]["hhi_solver"]["points"]] == [1.0, 3.0]
+
+
+# ----------------------------------------------------------------------------- 1Click win/loss by route
+def _cell(corridor: str, clip: float, headroom: float | None, *, oneclick: str = "ok", comp_status: str = "ok",
+          best: str | None = "relay") -> dict:
+    return {"corridor_id": corridor, "archetype": "x", "clip_usd": clip, "headroom_bps": headroom, "best_competitor": best,
+            "oneclick_rank": None, "oneclick_status": oneclick, "n_venues_ok": None,
+            "venues": {"1click": {"status": oneclick}, "relay": {"status": comp_status}, "across": {"status": "unsupported_route"}}}
+
+
+def test_wilson_interval_bounds():
+    assert history.wilson_interval(0, 0) is None
+    lo, hi = history.wilson_interval(0, 24)
+    assert lo == 0.0 and hi == pytest.approx(0.10131, abs=1e-4)          # z^2 / (n + z^2)
+    lo, hi = history.wilson_interval(24, 24)
+    assert hi == 1.0 and lo == pytest.approx(1 - 0.10131, abs=1e-4)
+    lo, hi = history.wilson_interval(13, 72)
+    assert lo < 13 / 72 < hi and 0.0 < lo and hi < 1.0
+    # symmetric in wins <-> losses
+    lo2, hi2 = history.wilson_interval(59, 72)
+    assert lo2 == pytest.approx(1 - hi) and hi2 == pytest.approx(1 - lo)
+    # by hand, 8/10 at z = 1.6449: centre 0.73612, half-width 0.19533 -> [0.5408, 0.9314]
+    lo, hi = history.wilson_interval(8, 10)
+    assert (lo, hi) == (pytest.approx(0.5408, abs=1e-3), pytest.approx(0.9314, abs=1e-3))
+
+
+def test_classify_race_exclusions_and_ties():
+    assert history.classify_race(_cell("a", 500, 1.0)) == ("win", None)
+    assert history.classify_race(_cell("a", 500, -1.0)) == ("loss", None)
+    assert history.classify_race(_cell("a", 500, 0.005)) == ("tie", None)
+    assert history.classify_race(_cell("a", 500, -0.0099)) == ("tie", None)
+    assert history.classify_race(_cell("a", 500, history.TIE_BPS)) == ("win", None)
+    assert history.classify_race(_cell("a", 500, None, oneclick="error")) == ("excluded", "oneclick_not_ok")
+    assert history.classify_race(_cell("a", 500, None, comp_status="no_liquidity")) == ("excluded", "no_competitor_ok")
+    assert history.classify_race(_cell("a", 500, None)) == ("excluded", "headroom_missing")
+
+
+def test_routes_aggregate_clips_ties_and_exclusions():
+    runs = []
+    for h in range(4):
+        t = f"2026-11-0{1 + h}T00:00:00Z"
+        runs.append({"t_utc": t, "cells": [
+            _cell("sol", 500, 2.0),                                          # 4 wins
+            _cell("sol", 50000, -1.0 if h < 3 else 0.001, best="lifi"),      # 3 losses + 1 tie
+            _cell("btc", 500, -5.0, best="relay" if h else "lifi"),          # 4 losses: relay 3, lifi 1
+            _cell("btc", 50000, None, oneclick="error"),                     # excluded
+        ]})
+    runs.append({"t_utc": "2026-11-05T00:00:00Z", "cells": [_cell("btc", 500, None, comp_status="error")]})
+    routes = history.summarize({"bench": runs})["bench"]["routes"]
+    sol = routes["by_corridor"]["sol"]
+    assert (sol["races"], sol["wins"], sol["losses"], sol["ties"], sol["decided"]) == (8, 4, 3, 1, 7)
+    assert sol["win_rate"] == pytest.approx(4 / 7) and sol["clips_usd"] == [500.0, 50000.0]
+    assert sol["median_headroom_bps_wins"] == 2.0 and sol["median_headroom_bps_losses"] == -1.0
+    assert sol["top_beaten_by"] == "lifi" and sol["span_days"] == pytest.approx(3.0)
+    lo, hi = sol["win_rate_ci90"]
+    assert lo < 4 / 7 < hi
+    btc = routes["by_corridor"]["btc"]
+    assert (btc["races"], btc["wins"], btc["losses"]) == (4, 0, 4) and btc["win_rate"] == 0.0
+    assert btc["excluded"] == 5 and btc["excluded_reasons"] == {"no_competitor_ok": 1, "oneclick_not_ok": 4}
+    assert btc["beaten_by_counts"] == {"relay": 3, "lifi": 1} and btc["top_beaten_by"] == "relay"
+    assert btc["last_t_utc"] == "2026-11-04T00:00:00Z"   # the excluded 11-05 cell is not a race
+    cell = routes["by_cell"]["sol@50000"]
+    assert (cell["wins"], cell["losses"], cell["ties"]) == (0, 3, 1)
+    ov = routes["overall"]
+    assert ov["n_routes"] == 2 and ov["n_runs"] == 5
+    assert ov["wins"] == sol["wins"] + btc["wins"] and ov["losses"] == sol["losses"] + btc["losses"]
+    assert ov["excluded"] == 5 and ov["beaten_by_counts"] == {"lifi": 4, "relay": 3} and ov["top_beaten_by"] == "lifi"
+    assert history.summarize({"bench": runs})["bench"]["routes"] == routes   # deterministic
+    json.dumps(routes, allow_nan=False)
+
+
+# ----------------------------------------------------------------------------- falsification streaks
+def _trig_rec(t: str, breached, sha: str = "s") -> dict:
+    return {"t_utc": t, "snapshot_sha256": sha, "bear_triggers": [
+        {"key": "g", "metric": "m", "threshold": 1.0, "comparator": ">", "current_value": 2.0, "breached": breached}]}
+
+
+def test_streak_resets_after_gap():
+    recs = [_trig_rec("2026-11-01T08:00:00Z", True), _trig_rec("2026-11-08T21:00:00Z", True),
+            _trig_rec("2026-11-10T13:00:00Z", True), _trig_rec("2026-11-11T06:00:00Z", True, "last")]
+    g = history._trigger_runs(recs)["g"]
+    # 11-08 21:00 -> 11-10 13:00 is 40 h > 36 h: the streak restarts at 11-10 13:00
+    assert g["breached_since_utc"] == "2026-11-10T13:00:00Z" and g["gap_reset_at_utc"] == "2026-11-10T13:00:00Z"
+    assert g["streak_broken_by"] == "gap" and g["observed_days"] == 2
+    assert g["breached_streak_days"] == pytest.approx(17 / 24, abs=1e-3)
+    assert g["days_to_falsification"] == pytest.approx(30 - 17 / 24, abs=1e-3) and g["falsified"] is False
+    assert g["last_snapshot_sha256"] == "last" and g["state_now"] == "breached"
+
+
+def test_streak_unmeasured_and_clear_break_it():
+    recs = [_trig_rec("2026-11-01T00:00:00Z", True), _trig_rec("2026-11-02T00:00:00Z", None),
+            _trig_rec("2026-11-03T00:00:00Z", True), _trig_rec("2026-11-04T00:00:00Z", True)]
+    g = history._trigger_runs(recs)["g"]
+    assert g["breached_since_utc"] == "2026-11-03T00:00:00Z" and g["streak_broken_by"] == "unmeasured"
+    assert g["breached_streak_days"] == pytest.approx(1.0) and g["n_unmeasured"] == 1 and g["gap_reset_at_utc"] is None
+    recs[1] = _trig_rec("2026-11-02T00:00:00Z", False)
+    assert history._trigger_runs(recs)["g"]["streak_broken_by"] == "clear"
+    now_unmeasured = history._trigger_runs(recs + [_trig_rec("2026-11-05T00:00:00Z", None)])["g"]
+    assert now_unmeasured["state_now"] == "unmeasured" and now_unmeasured["breached_streak_days"] is None
+    assert now_unmeasured["observed_days"] == 0 and now_unmeasured["days_to_falsification"] == 30.0
+
+
+def test_streak_falsified_after_30_continuous_days():
+    from datetime import datetime, timedelta, timezone
+    t0 = datetime(2026, 10, 1, 6, tzinfo=timezone.utc)
+    # daily runs with jitter up to +-6 h stay continuous; 31 records span exactly 30 days
+    recs = [_trig_rec((t0 + timedelta(days=d, hours=(3 if d % 2 else 0))).strftime("%Y-%m-%dT%H:%M:%SZ"), True) for d in range(30)]
+    recs.append(_trig_rec((t0 + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"), True))
+    g = history._trigger_runs(recs)["g"]
+    assert g["streak_broken_by"] == "start_of_history" and g["observed_days"] == 31
+    assert g["breached_streak_days"] == pytest.approx(30.0) and g["falsified"] is True and g["days_to_falsification"] == 0.0
+    assert history._trigger_runs(recs[:-1])["g"]["falsified"] is False

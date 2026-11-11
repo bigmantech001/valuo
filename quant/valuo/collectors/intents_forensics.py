@@ -91,6 +91,8 @@ __all__ = [
     "confidential_split_guard",
     "SPLIT_STATUS_MEASURED",
     "SPLIT_STATUS_IMPLAUSIBLE",
+    "SPLIT_STATUS_ONCHAIN",
+    "onchain_share_estimate",
     "SPLIT_STATUS_UNAVAILABLE",
     "SOLVER_AUDIT_PAGES",
     "SOLVER_SAMPLE_TARGET_SPAN_S",
@@ -180,6 +182,8 @@ BOOTSTRAP_STREAM_SOLVER_UNIT = 4  # unit-level solver bootstrap kept for compari
 # confidential_split_guard outcomes (intents_forensics.volume.confidential_share_status).
 SPLIT_STATUS_MEASURED = "measured"
 SPLIT_STATUS_IMPLAUSIBLE = "implausible_fallback"
+# nearstats' split was rejected, and the share is estimated from the on-chain treasury boundary instead
+SPLIT_STATUS_ONCHAIN = "onchain_estimate"
 SPLIT_STATUS_UNAVAILABLE = "unavailable"
 
 
@@ -1332,18 +1336,44 @@ def confidential_split_guard(
         })
         return volume
     fallback = A.get("confidential_share")
-    value = fallback.value if fallback_share is None else fallback_share
+    reasons = [f"share_below_floor: reported {share:.4%} < {floor:.0%}", *signals]
     volume["split_reported"] = {k: volume.get(k) for k in _SPLIT_FIELDS}
     for k in _SPLIT_FIELDS:
         volume[k] = None
+    cross = {"step": "cross-check in fetched payloads", "value": None,
+             "result": "none: DefiLlama dexs and nearstats totals both report the NEAR total; privacyRoutes is a 100-row route sample, not a volume share"}
+    est = onchain_share_estimate(boundary, volume) if fallback_share is None else None
+    if est is not None:
+        value = est["value"]
+        volume.update({
+            "confidential_share_30d": value,
+            "confidential_share_low": est["low"], "confidential_share_high": est["high"],
+            "confidential_share_estimate": est,
+            "confidential_share_status": SPLIT_STATUS_ONCHAIN, "confidential_share_measured": False,
+            "confidential_share_source": (f"on-chain estimate: Confidential Intents Treasury 24h inflow / (24h volume + inflow) = {value:.1%} "
+                                          f"(band {est['low']:.1%}-{est['high']:.1%}); nearstats split implausible"),
+            "confidential_share_reason": reasons,
+            "confidential_share_fallback_chain": chain + [cross, {
+                **proxy_step, "value": value, "low": est["low"], "high": est["high"],
+                "result": "USED as the share (band from the two flow sides and the two readings of the 24h total); biases: " + "; ".join(est["biases"]),
+            }, {"step": "assumption:confidential_share", "value": fallback.value, "low": fallback.low, "high": fallback.high, "source": "assumption",
+                "result": "not used: the on-chain estimate is available"}],
+        })
+        warnings.append(
+            f"confidential split: nearstats reports confidential 30d {_usd_txt(volume['split_reported']['confidential30d'])} ({share:.4%}), rejected "
+            f"({'; '.join(signals)}). Share ESTIMATED ON-CHAIN from the Confidential Intents Treasury: {value:.1%} (band {est['low']:.1%}-{est['high']:.1%}; "
+            f"24h inflow {_usd_txt(est['flow_in_24h_usd'])}, outflow {_usd_txt(est['flow_out_24h_usd'])}, volume {_usd_txt(est['volume_24h_usd'])}), "
+            f"replacing the registry assumption {fallback.value:.0%}"
+        )
+        return volume
+    value = fallback.value if fallback_share is None else fallback_share
     volume.update({
         "confidential_share_30d": value,
         "confidential_share_status": SPLIT_STATUS_IMPLAUSIBLE, "confidential_share_measured": False,
         "confidential_share_source": f"assumption: registry confidential_share = {value:.0%} (nearstats split implausible; not a measurement)",
-        "confidential_share_reason": [f"share_below_floor: reported {share:.4%} < {floor:.0%}", *signals],
+        "confidential_share_reason": reasons,
         "confidential_share_fallback_chain": chain + [
-            {"step": "cross-check in fetched payloads", "value": None,
-             "result": "none: DefiLlama dexs and nearstats totals both report the NEAR total; privacyRoutes is a 100-row route sample, not a volume share"},
+            cross,
             proxy_step,
             {"step": "assumption:confidential_share", "value": value, "low": fallback.low, "high": fallback.high, "source": "assumption"},
         ],
@@ -1374,6 +1404,45 @@ def boundary_inflow_ratio(boundary: Mapping[str, Any] | None, volume: Mapping[st
     inflow, total = _num(b.get("flow_24h_in_lower_bound_usd")), _num(volume.get("24h"))
     ratio = inflow / (total + inflow) if inflow is not None and total and total > 0 else None
     return {"confidential_boundary_inflow_24h_usd": inflow, "confidential_boundary_inflow_ratio_24h": ratio}
+
+
+def onchain_share_estimate(boundary: Mapping[str, Any] | None, volume: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Confidential share of volume estimated from the Confidential Intents Treasury boundary (on-chain, no keys).
+
+    A confidential swap enters the shard as a shield (treasury inflow) and leaves as an unshield (outflow), so over
+    a window the gross boundary flow on either side approximates confidential volume. With F = treasury flow over
+    24 h and V = all-route 24 h volume:
+
+      point = F_in / (V + F_in)                         (V read as public-only volume)
+      low   = min(F_in, F_out) / (V + min(F_in, F_out)) (smaller side, V public-only)
+      high  = max(F_in, F_out) / V                      (larger side, V already including confidential flow)
+
+    Known biases, stated with the number: hourly snapshots net out same-hour shields and unshields (F is a lower
+    bound on gross flow; pushes the estimate down); solver inventory crosses the boundary too (pushes it up); one
+    shield can fund several swaps inside the shard (pushes it down). The window is the last 24 hours, not 30 days.
+    Returns None when the boundary audit, either flow or the 24 h volume is missing."""
+    b = boundary or {}
+    f_in, f_out, v = _num(b.get("flow_24h_in_lower_bound_usd")), _num(b.get("flow_24h_out_lower_bound_usd")), _num(volume.get("24h"))
+    if f_in is None or f_out is None or v is None or v <= 0 or f_in < 0 or f_out < 0 or b.get("status") not in (None, "measured"):
+        return None
+    lo_f, hi_f = min(f_in, f_out), max(f_in, f_out)
+    point = f_in / (v + f_in)
+    low = lo_f / (v + lo_f)
+    high = min(hi_f / v, 0.99)
+    window = b.get("flow_window") if isinstance(b.get("flow_window"), Mapping) else {}
+    return {
+        "value": point, "low": min(low, point), "high": max(high, point),
+        "flow_in_24h_usd": f_in, "flow_out_24h_usd": f_out, "volume_24h_usd": v,
+        "window_start_utc": window.get("start_time_utc"), "window_end_utc": window.get("end_time_utc"),
+        "block_height": b.get("block_height"),
+        "method": "treasury inflow / (24h volume + inflow); band: smaller flow side over (V + flow) to larger side over V",
+        "biases": [
+            "same-hour shields and unshields net out in hourly snapshots (estimate biased down)",
+            "solver inventory crosses the boundary (biased up)",
+            "one shield can fund several swaps inside the shard (biased down)",
+            "24-hour window, not 30 days (day-to-day noise)",
+        ],
+    }
 
 
 def _usd_txt(x: float | None) -> str:

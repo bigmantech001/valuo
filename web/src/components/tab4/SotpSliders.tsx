@@ -75,7 +75,10 @@ export function SotpSliders({ slice, regimeOptions, portCheck, onScenarioChange 
 
   const H = slice.sotp.horizon_months;
   const set = (patch: Partial<SliderState>) => setState((s) => (s ? { ...s, ...patch } : s));
-  const growthRange = { min: reg?.public_volume_growth_yoy?.low ?? -0.2, max: reg?.public_volume_growth_yoy?.high ?? 1.5 };
+  // A measured growth carries its 90% CI as low/high; the slider still spans the registry's stress range so a judge can test a decline.
+  const growthA = reg?.public_volume_growth_yoy;
+  const growthMeasured = growthA?.source === "measured";
+  const growthRange = { min: Math.min(growthA?.low ?? -0.2, -0.2), max: Math.max(growthA?.high ?? 1.5, 1.5) };
   const shareRange = { min: reg?.confidential_share_target?.low ?? 0.05, max: reg?.confidential_share_target?.high ?? 0.6 };
   const confTakeRange = { min: reg?.confidential_take_bps?.low ?? 10, max: reg?.confidential_take_bps?.high ?? 30 };
   const ceiling = cal.competitive_fee_ceiling_bps;
@@ -114,7 +117,7 @@ export function SotpSliders({ slice, regimeOptions, portCheck, onScenarioChange 
             step={0.01}
             onChange={(v) => set({ growth_yoy: v })}
             format={pct0}
-            description={`Assumption, default ${pct0(reg?.public_volume_growth_yoy?.value ?? NaN)}; ${fmtPct(monthlyFromYoy(state.growth_yoy), { decimals: 2, signed: true })} a month on the expected path.`}
+            description={`${growthMeasured ? `Measured ${pct0(growthA?.value ?? NaN)} a year (trend of daily volume, 90% CI ${pct0(growthA?.low ?? NaN)} to ${pct0(growthA?.high ?? NaN)})` : `Assumption, default ${pct0(growthA?.value ?? NaN)}`}; ${fmtPct(monthlyFromYoy(state.growth_yoy), { decimals: 2, signed: true })} a month on the expected path.`}
           />
           <div className="flex flex-col gap-2">
             <Slider

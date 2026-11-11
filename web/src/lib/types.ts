@@ -446,7 +446,41 @@ export type DefiLlamaVolume = {
 };
 
 /** `intents_forensics.volume.confidential_share_status`. */
-export type ConfidentialShareStatus = "measured" | "implausible_fallback" | "unavailable";
+export type ConfidentialShareStatus = "measured" | "implausible_fallback" | "onchain_estimate" | "unavailable";
+
+/** `intents_forensics.volume.confidential_share_estimate`: the share read from the Confidential Intents Treasury boundary. */
+export type ConfidentialShareEstimate = {
+  value: number;
+  low: number;
+  high: number;
+  flow_in_24h_usd: number;
+  flow_out_24h_usd: number;
+  volume_24h_usd: number;
+  window_start_utc?: string | null;
+  window_end_utc?: string | null;
+  block_height?: number | null;
+  method: string;
+  biases: string[];
+};
+
+/** `volume_growth` (quant/valuo/models/volume_growth.py): measured trend growth of daily NEAR Intents volume. */
+export type VolumeGrowth = {
+  status: "measured" | "insufficient_data";
+  growth_yoy: number | null;
+  ci90: [number, number] | null;
+  method: string;
+  convention: string;
+  window_days: number;
+  hac_lag_days: number;
+  n_days: number;
+  first_day: string | null;
+  last_day: string | null;
+  source?: string | null;
+  source_sha256?: string | null;
+  used_in_model?: boolean;
+  note?: string;
+  cross_checks?: Record<string, { value: number; [k: string]: number }>;
+};
 
 /** `intents_forensics.volume` (nearstats intents.totals + totalsBreakdown; USD). */
 export type VolumeDict = {
@@ -466,6 +500,10 @@ export type VolumeDict = {
   /** human-readable origin of confidential_share_30d ("measured: ...", "assumption: ...", "unavailable: ...") */
   confidential_share_source?: string;
   confidential_share_measured?: boolean;
+  /** band of the on-chain estimate ("onchain_estimate" only) */
+  confidential_share_low?: number | null;
+  confidential_share_high?: number | null;
+  confidential_share_estimate?: ConfidentialShareEstimate | null;
   public7d: number | null;
   confidential7d: number | null;
   confidential_share_7d: number | null;
@@ -1358,6 +1396,8 @@ export interface Snapshot {
   relative_value?: RelativeValue | null;
   /** Collector extra (collectors/chain_signatures.py): v1.signer usage audit; null when it failed, absent in older snapshots. */
   chain_signatures?: ChainSignatures | null;
+  /** Measured volume growth (quant/valuo/models/volume_growth.py); absent from older snapshots. */
+  volume_growth?: VolumeGrowth | null;
   /** Out-of-sample volume-engine backtest (quant/valuo/models/backtest.py); absent from older snapshots. */
   backtest?: VolumeBacktest | null;
   // bull_case.py: the long-term case as falsifiable conditions graded against live data.

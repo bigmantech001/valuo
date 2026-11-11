@@ -3,6 +3,7 @@ import { NA } from "@/lib/format";
 import type { BearCase, BearScenario, TriggerComparator } from "@/lib/types";
 import { ProvenanceBadge, type ProvenanceRef } from "@/components/provenance/ProvenanceBadge";
 import { Badge, Card, Table, type Column } from "@/components/ui";
+import { FalsificationAlert, FalsificationWatch } from "./FalsificationWatch";
 import { comparatorRule, fmtMetricValue, inconclusiveReason, metricLabel, metricProvenance, prose, scenarioStatus, shortUrl, TRIGGER_BADGE, triggerStatus, type TriggerStatus } from "./bearData";
 
 interface TriggerRow {
@@ -161,7 +162,8 @@ const columns: Column<TriggerRow>[] = [
 /**
  * Early-warning trigger board: one row per scenario trigger (plus a secondary row where the
  * model defines one), with the live value it was graded against, its source record and the
- * breached / not breached / inconclusive / not measured status.
+ * breached / not breached / inconclusive / not measured status. Above it, a banner when a
+ * falsification record exists on-chain; below it, each trigger's progress against the 30-day rule.
  */
 export function TriggerBoard({ bear }: { bear: BearCase }) {
   const scenarios = bear.scenarios ?? [];
@@ -170,17 +172,21 @@ export function TriggerBoard({ bear }: { bear: BearCase }) {
   const unmeasured = rows.filter((r) => r.status === "unmeasured").length;
   const inconclusive = rows.filter((r) => r.status === "inconclusive").length;
   return (
-    <Card
-      title="Early-warning triggers"
-      subtitle="Each scenario is paired with a live metric and a threshold. The thesis is treated as falsified if any trigger holds for 30 consecutive days."
-      padded={false}
-      actions={
-        <Badge variant={breached ? "warn" : "ok"} dot>
-          {breached} of {rows.length} breached{inconclusive ? `, ${inconclusive} inconclusive` : ""}{unmeasured ? `, ${unmeasured} not measured` : ""}
-        </Badge>
-      }
-    >
-      <Table<TriggerRow> columns={columns} rows={rows} rowKey={(r) => r.id} dense={false} stickyHeader={false} emptyText="No scenario triggers in this snapshot" />
-    </Card>
+    <div className="space-y-6">
+      <FalsificationAlert bear={bear} />
+      <Card
+        title="Early-warning triggers"
+        subtitle="Each scenario is paired with a live metric and a threshold. The thesis is treated as falsified if any trigger holds for 30 consecutive days."
+        padded={false}
+        actions={
+          <Badge variant={breached ? "warn" : "ok"} dot>
+            {breached} of {rows.length} breached{inconclusive ? `, ${inconclusive} inconclusive` : ""}{unmeasured ? `, ${unmeasured} not measured` : ""}
+          </Badge>
+        }
+      >
+        <Table<TriggerRow> columns={columns} rows={rows} rowKey={(r) => r.id} dense={false} stickyHeader={false} emptyText="No scenario triggers in this snapshot" />
+      </Card>
+      <FalsificationWatch bear={bear} />
+    </div>
   );
 }
