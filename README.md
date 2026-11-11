@@ -14,23 +14,23 @@ Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not
 
 | Section | What it is | Try it without a wallet |
 | --- | --- | --- |
-| **01 Thesis & evidence** | The **bull-case scorecard**: 8 conditions the long-term case needs (Intents volume growth, holder revenue, the L1 multiple, 1Click's pricing edge, confidential flow, net deflation, the 2.5% → 1.6% issuance cut, solver competition). Each shows the value it requires, the live value, a 90-day trend from a real series and a status. Below it: the reverse valuation and the evidence scorecard. | `/terminal#thesis` |
-| **02 Execution alpha** | **Live quote race.** The same dry quote request goes to 1Click, Relay, LI.FI and Across at once, ranked on destination units delivered for the identical input, on cross-VM (`ETH USDC → SOL USDC`), native BTC and EVM L2 routes, at $500, $50,000 and $250,000. Nothing is signed or sent. | `/terminal#execution` → **Run live quote race** |
-| **03 Supply physics** | Issuance measured per epoch from `total_supply` jumps, against buybacks, L1 gas burn and NEP storage-staking locks (1 NEAR per 100 KB). Breakeven daily volume per issuance regime, and a **Chain Signatures** audit of `v1.signer` usage. | `/terminal#supply` → toggle the regime |
-| **04 SOTP & Monte Carlo** | Three-engine sum-of-the-parts (SOTP) valuation, 10,000 seeded paths (seed `20261114`), sliders that re-price client-side with the same formulas, a sensitivity tornado and peer multiples. **Publish your forecast** to NEAR from here (needs a wallet). | `/terminal#sotp` → move the sliders |
-| **05 Bear case** | Four stress scenarios priced through the same model, each with a live early-warning trigger and threshold. A trigger that was not measured says so; it is never read as "not breached". | `/terminal#bear` |
-| **06 History** | Daily snapshots and hourly quote races as time series, plus an **out-of-sample backtest** of the volume model, including where it fails. | `/terminal#history` |
-| **07 Ask the analyst** | Questions answered only from the hashed snapshot by a model on NEAR AI Cloud's attested private inference. Every sentence cites its source; numbers are checked against the context; the response signature is verified against NEAR AI's attestation report. *If it is not in the snapshot, the analyst says so.* | `/terminal#analyst` |
+| **01 Thesis & evidence** | The **bull-case scorecard**: 8 conditions the long-term case needs (Intents volume growth, holder revenue, the L1 multiple, 1Click's pricing edge, confidential flow, net deflation, the 2.5% → 1.6% issuance cut, solver competition). Each shows the value it requires, the live value, a 90-day trend from a real series and a status. Below it: the reverse valuation and the evidence scorecard. | [`/terminal#thesis`](https://usevaluo.vercel.app/terminal#thesis) |
+| **02 Execution alpha** | **Live quote race.** The same dry quote request goes to 1Click, Relay, LI.FI and Across at once, ranked on destination units delivered for the identical input, on cross-VM (`ETH USDC → SOL USDC`), native BTC and EVM L2 routes, at $500, $50,000 and $250,000. Nothing is signed or sent. | [`/terminal#execution`](https://usevaluo.vercel.app/terminal#execution) → **Run live quote race** |
+| **03 Supply physics** | Issuance measured per epoch from `total_supply` jumps, against buybacks, L1 gas burn and NEP storage-staking locks (1 NEAR per 100 KB). Breakeven daily volume per issuance regime, and a **Chain Signatures** audit of `v1.signer` usage. | [`/terminal#supply`](https://usevaluo.vercel.app/terminal#supply) → toggle the regime |
+| **04 SOTP & Monte Carlo** | Three-engine sum-of-the-parts (SOTP) valuation, 10,000 seeded paths (seed `20261114`), sliders that re-price client-side with the same formulas, a sensitivity tornado and peer multiples. **Publish your forecast** to NEAR from here (needs a wallet). | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp) → move the sliders |
+| **05 Bear case** | Four stress scenarios priced through the same model, each with a live early-warning trigger and threshold. A trigger that was not measured says so; it is never read as "not breached". | [`/terminal#bear`](https://usevaluo.vercel.app/terminal#bear) |
+| **06 History** | Daily snapshots and hourly quote races as time series, plus an **out-of-sample backtest** of the volume model, including where it fails. | [`/terminal#history`](https://usevaluo.vercel.app/terminal#history) |
+| **07 Ask the analyst** | Questions answered only from the hashed snapshot by a model on NEAR AI Cloud's attested private inference. Every sentence cites its source; numbers are checked against the context; the response signature is verified against NEAR AI's attestation report. *If it is not in the snapshot, the analyst says so.* | [`/terminal#analyst`](https://usevaluo.vercel.app/terminal#analyst) |
 
 ### More to explore
 
 | Feature | What it is | Where |
 | --- | --- | --- |
-| **Verify sources** | Re-hashes every stored raw payload with WebCrypto in your browser, and "Fetch live and compare" re-issues a recorded request to show what changed since the snapshot. | header → **Verify sources**, or `/terminal?verify=rehash` |
-| **IC memo** | A 15-section Markdown memo generated from the snapshot. It opens with the falsifiable long-term case. | `/api/snapshot?format=memo` |
-| **Snapshot JSON** | The full dataset the terminal renders, with the manifest. | `/api/snapshot?format=json` |
-| **Forecast board** | Every forecast published to NEAR SocialDB under `*/valuo/forecast/*`, read key-free and scored against later snapshots. | `/terminal#sotp`, `/api/forecasts` |
-| **Landing page** | The thesis in one page: what the price requires, the measured strengths and weaknesses, and the falsification triggers. | `/` |
+| **Verify sources** | Re-hashes every stored raw payload with WebCrypto in your browser, and "Fetch live and compare" re-issues a recorded request to show what changed since the snapshot. | header → **Verify sources**, or [`/terminal?verify=rehash`](https://usevaluo.vercel.app/terminal?verify=rehash) |
+| **IC memo** | A 15-section Markdown memo generated from the snapshot. It opens with the falsifiable long-term case. | [`/api/snapshot?format=memo`](https://usevaluo.vercel.app/api/snapshot?format=memo) |
+| **Snapshot JSON** | The full dataset the terminal renders, with the manifest. | [`/api/snapshot?format=json`](https://usevaluo.vercel.app/api/snapshot?format=json) |
+| **Forecast board** | Every forecast published to NEAR SocialDB under `*/valuo/forecast/*`, read key-free and scored against later snapshots. | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp), below **Publish your forecast** (click **Refresh** if it looks empty; the list is cached up to 30 s). Raw: [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts) |
+| **Landing page** | The thesis in one page: what the price requires, the measured strengths and weaknesses, and the falsification triggers. | [`/`](https://usevaluo.vercel.app/) |
 
 The terminal has a sticky left sidebar with count badges (bull-case conditions on track, bear triggers breached, history points) that collapses to its section numbers. On phones and tablets it becomes a left drawer opened by a burger button, every table scrolls inside its card, and inputs use 16 px text so iOS does not zoom. The header shows the snapshot's NEAR block, its time and how far it trails the live chain head.
 
@@ -269,6 +269,8 @@ flowchart LR
 ### One real run, end to end
 
 On 2026-11-10 the scheduler's account anchored the 13:04 UTC snapshot (manifest of 134 hashed records, NEAR block 223,919,878) on NEAR mainnet in transaction [`7fZ41XeD…`](https://nearblocks.io/txns/7fZ41XeDrCAjzN2ig7YTP7e3hPZz218Bns2KiiUkLPyy), written at block 223,920,960. Checked from a separate machine with `make anchor-verify ANCHOR=0161aff7…81f0`: every hash matched. The anchor account is [`0161aff7…81f0`](https://nearblocks.io/address/0161aff765e5412f3d3cac430933fb44325b5b012cf525410a9c7d1fa2fa81f0).
+
+**A visitor forecast, end to end.** On 2026-11-11 the account [`bigmantech001.near`](https://nearblocks.io/address/bigmantech001.near) published a forecast from its own wallet through **Publish your forecast**: transaction [`3ZqwUprY…`](https://nearblocks.io/txns/3ZqwUprYywZuJ6puotb7mK9zHBTKmKnM3aQaTWwmpU2y), SocialDB key `bigmantech001.near/valuo/forecast/20261111T045413Z`, written at block 224,018,870 (5.5 Tgas, 0.03 NEAR storage deposit). It shows on the board at [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp) (scroll below **Publish your forecast**) as "On-chain", and in [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts).
 
 ---
 
