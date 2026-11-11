@@ -17,8 +17,13 @@ import type { AnalystErrorReason, AnalystEvent, AnalystStatus } from "@/lib/anal
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-/** A grounded, signature-checked answer takes about 20 s; 60 s is within every Vercel plan's limit. */
-export const maxDuration = 60;
+/**
+ * A grounded, signature-checked answer usually takes 5-25 s, but a reasoning-heavy one was measured at
+ * 59.5 s. The cap has to cover the attestation preflight (15 s, cached), the stream (TOTAL_TIMEOUT_MS) and
+ * the signature lookup (8 s), so a slow answer ends with the route's own timeout message instead of being
+ * killed mid-stream. 180 s is within the Fluid compute limit on every Vercel plan (Hobby: 300 s).
+ */
+export const maxDuration = 180;
 
 /**
  * /api/analyst - IC analyst answered by NEAR AI Cloud, grounded only on the loaded artifacts.
