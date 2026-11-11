@@ -34,11 +34,7 @@ export function Hero({ data, headroomHistory = [] }: { data: LandingData | null;
             >
               Open the terminal
             </Link>
-            {data ? (
-              <a href="/api/snapshot?format=memo" download className="text-[15px] text-accent underline-offset-4 hover:underline">
-                Read the IC memo
-              </a>
-            ) : (
+            {data ? null : (
               <a href="#reproduce" className="text-[15px] text-accent underline-offset-4 hover:underline">
                 Generate a snapshot
               </a>
