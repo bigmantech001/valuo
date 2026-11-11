@@ -1,4 +1,4 @@
-# Valuo
+# <img src="web/src/app/icon.svg" alt="" width="34" height="34" align="top"> Valuo
 
 **The long-term investment case for $NEAR, stated as conditions anyone can check against live mainnet data.**
 

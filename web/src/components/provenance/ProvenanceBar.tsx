@@ -13,6 +13,7 @@ import { BurgerButton, useDrawer } from "@/components/ui/MobileDrawer";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { ProvenanceDrawer } from "./ProvenanceDrawer";
 import { ReproduceButton } from "./ReproduceButton";
+import { LogoMark } from "@/components/ui/LogoMark";
 
 /** The slice of the snapshot the bar needs; a full Snapshot satisfies it, but passing the slice keeps the client payload small. */
 export type ProvenanceBarSnapshot = Pick<Snapshot, "generated_at_utc" | "near_rpc" | "schema_version" | "valuo_version" | "seed">;
@@ -69,7 +70,8 @@ export function ProvenanceBar({ snapshot, manifest, initialFreshness = null, ini
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-canvas/90 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
         <div className="mx-auto flex h-14 max-w-none items-center gap-x-3 px-4 sm:px-6 lg:h-auto lg:flex-wrap lg:gap-x-8 lg:gap-y-2 lg:px-[1.25vw] lg:py-3">
-          <Link href="/" title="Back to the overview" className="font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
+          <Link href="/" title="Back to the overview" className="flex items-center gap-2 font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
+            <LogoMark className="size-6" />
             Valuo
           </Link>
 

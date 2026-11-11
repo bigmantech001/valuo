@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { BurgerButton, DrawerChrome, DrawerHead, drawerPanelClass, useDrawer } from "@/components/ui/MobileDrawer";
+import { LogoMark } from "@/components/ui/LogoMark";
 
 const LINKS: Array<{ href: string; label: string }> = [
   { href: "#findings", label: "Findings" },
@@ -23,7 +24,8 @@ export function LandingNav() {
     <>
     <header className="sticky top-0 z-40 border-b border-border bg-canvas/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-none items-center gap-8 px-4 sm:px-6 lg:px-[1.25vw]">
-        <Link href="/" className="font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
+        <Link href="/" className="flex items-center gap-2 font-serif text-[22px] font-medium leading-none tracking-tight text-ink">
+          <LogoMark className="size-6" />
           Valuo
         </Link>
         <nav aria-label="Sections" className="ml-auto hidden items-center gap-6 lg:flex">
