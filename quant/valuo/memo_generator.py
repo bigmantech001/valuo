@@ -15,6 +15,11 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from valuo.collectors.fee_pool import memo_markdown as fee_pool_memo_markdown
+from valuo.collectors.liquidity_ladder import memo_markdown as liquidity_ladder_memo_markdown
+from valuo.collectors.wide_peers import memo_markdown as wide_peers_memo_markdown
+from valuo.models.take_rate_series import memo_markdown as take_rate_series_memo_markdown
+from valuo.models.volume_bootstrap import memo_markdown as volume_bootstrap_memo_markdown
 from valuo.schemas import (
     BearCase,
     ExecutionBenchmark,
@@ -36,8 +41,17 @@ NA = "n/a"
 # Memo section numbers (one place, so cross-references never drift when sections move).
 SEC: dict[str, int] = {
     "bull": 1, "summary": 2, "market": 3, "believe": 4, "relval": 5, "model": 6, "micro": 7, "conc": 8, "supply": 9,
-    "sotp": 10, "bear": 11, "score": 12, "assumptions": 13, "reproduce": 14, "provenance": 15,
+    "sotp": 10, "bear": 11, "further": 12, "score": 13, "assumptions": 14, "reproduce": 15, "provenance": 16,
 }
+# Additive evidence views rendered in the "Further evidence" section: (snapshot key, sub-heading, fn(data, snap_dict) -> Markdown).
+# Each fn lives in its feature module (``memo_markdown``). A key that is absent or null renders one line saying so. One entry per view.
+EXTRA_SECTIONS: list[tuple[str, str, Any]] = [
+    ("fee_pool_share", "Fee-pool share against competing cross-chain routers", fee_pool_memo_markdown),
+    ("liquidity_ladder", "Size limits: the largest clip each router quotes", liquidity_ladder_memo_markdown),
+    ("wide_peers", "Wider peer set: FDV to revenue across the top revenue chains", wide_peers_memo_markdown),
+    ("take_rate_series", "Take-rate history", take_rate_series_memo_markdown),
+    ("backtest", "Volume engine: GBM against a block bootstrap, out of sample", volume_bootstrap_memo_markdown),
+]
 _REGIME_LABEL = {"status_quo": "status quo (cap flat)", "svrn_glidepath": "SVRN glidepath", "custom_cap": "custom cap"}
 _CLASS_LABEL = {
     "ai_agent": "AI agent", "bridge_relayer": "bridge / token contract", "implicit_account": "implicit account",
@@ -1391,6 +1405,24 @@ def _section_bull(snap: Snapshot) -> str:
     ])
 
 
+def _section_further(snap: Snapshot) -> str:
+    """One sub-section per EXTRA_SECTIONS view. A renderer that raises is reported in place, never fatal."""
+    d = snap.model_dump(mode="json")
+    parts: list[str] = []
+    for i, (key, heading, fn) in enumerate(EXTRA_SECTIONS, start=1):
+        head = f"### {SEC['further']}.{i} {heading}"
+        data = d.get(key)
+        if not isinstance(data, Mapping):
+            parts += [head, f"Not available in this run (`snapshot.{key}` is null; see the warnings in section {SEC['provenance']})."]
+            continue
+        try:
+            body = fn(data, d)
+        except Exception as exc:  # noqa: BLE001 - a rendering fault must not lose the memo
+            body = f"Could not be rendered ({type(exc).__name__}: {exc}); the data is in `snapshot.{key}`."
+        parts += [head, body if isinstance(body, str) else "\n".join(body)]
+    return "\n\n".join(parts) if parts else "No additive views are registered in this build."
+
+
 # ============================================================================ entry point
 def render_memo(snapshot: Snapshot | Mapping[str, Any], manifest: Manifest | Mapping[str, Any] | None) -> str:
     """Render the Investment Committee memo (Markdown) from a snapshot and its manifest."""
@@ -1417,6 +1449,7 @@ def render_memo(snapshot: Snapshot | Mapping[str, Any], manifest: Manifest | Map
         f"## {SEC['supply']}. Supply physics", _section_supply(snap),
         f"## {SEC['sotp']}. Sum-of-the-parts valuation and peer comparables", _section_sotp(snap),
         f"## {SEC['bear']}. Bear case and early-warning triggers", _section_bear(snap),
+        f"## {SEC['further']}. Further evidence: take-rate history, size limits, fee share, wider peers", _section_further(snap),
         f"## {SEC['score']}. Evidence scorecard", _section_scorecard(snap),
         f"## {SEC['assumptions']}. Assumptions register", _section_assumptions(snap),
         f"## {SEC['reproduce']}. Reproduction", _section_reproduce(snap),

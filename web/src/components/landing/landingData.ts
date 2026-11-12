@@ -253,7 +253,46 @@ export interface RelativeValueView {
   caveat: string | null;
 }
 
+/**
+ * Inputs of the landing "since you arrived" strip. Kept flat and small because it crosses to a client
+ * component: per-day rates from supply_physics and the pinned supply reading from near_rpc.
+ */
+export interface SupplyTickerData {
+  /** supply_physics.current_daily_issuance_near (measured at epoch boundaries) */
+  issuanceDaily: number;
+  /** supply_physics.current_daily_sinks_near.{buyback, gas_burn, state_lock, total} */
+  buybackDaily: number;
+  gasBurnDaily: number;
+  stateLockDaily: number;
+  sinksDaily: number;
+  /** supply_physics.sink_coverage_ratio */
+  coverageRatio: number;
+  /** supply_physics.current_net_float_change_near_day; null on snapshots without it */
+  netFloatDaily: number | null;
+  /** one arithmetic step: breakeven_daily_volume_usd.status_quo / (trailing-30d volume / 30) */
+  breakevenTimesVolume: number | null;
+  /** near_rpc.block_height / timestamp_utc / total_supply_near at the pinned block */
+  snapshotBlock: number;
+  snapshotBlockTsUtc: string;
+  snapshotTotalSupply: number;
+  /** near_rpc.epoch_issuance.epoch_start_height and near_rpc.epoch_length_blocks: where mints land */
+  epochStartHeight: number | null;
+  epochLengthBlocks: number | null;
+  mintedPerEpoch: number | null;
+  epochHours: number | null;
+}
+
+/** GET /api/supply: one `block {"finality":"final"}` header read from NEAR mainnet RPC, server-side. */
+export interface SupplyReading {
+  block_height: number;
+  block_timestamp_utc: string;
+  total_supply_near: number;
+  fetched_at_utc: string;
+}
+
 export interface LandingData {
+  /** rates and pinned supply for the "since you arrived" strip; null when a rate is missing */
+  supplyTicker: SupplyTickerData | null;
   /** snapshot.bull_case counts (null on snapshots without it) */
   bullCase: {
     onTrack: number;
@@ -544,7 +583,32 @@ export function buildLandingData(snapshot: Snapshot, manifest: Manifest | null):
       }
     : null;
 
+  const tickerRates = [sp.current_daily_issuance_near, numOf(sinks, "buyback"), numOf(sinks, "gas_burn"), numOf(sinks, "state_lock"), numOf(sinks, "total"), sp.sink_coverage_ratio];
+  const tickerVolNow = numOf(vol, "30d") !== null ? (numOf(vol, "30d") as number) / 30 : null;
+  const tickerBreakeven = numOf(asDict(sp.breakeven_daily_volume_usd), "status_quo");
+  const supplyTicker: SupplyTickerData | null =
+    tickerRates.every((v): v is number => typeof v === "number" && Number.isFinite(v)) && tickerRates[0] > 0 && tickerRates[4] >= 0 && Number.isFinite(rpc.total_supply_near)
+      ? {
+          issuanceDaily: tickerRates[0],
+          buybackDaily: tickerRates[1],
+          gasBurnDaily: tickerRates[2],
+          stateLockDaily: tickerRates[3],
+          sinksDaily: tickerRates[4],
+          coverageRatio: tickerRates[5],
+          netFloatDaily: numField(sp, "current_net_float_change_near_day"),
+          breakevenTimesVolume: tickerBreakeven !== null && tickerVolNow ? tickerBreakeven / tickerVolNow : null,
+          snapshotBlock: rpc.block_height,
+          snapshotBlockTsUtc: rpc.timestamp_utc,
+          snapshotTotalSupply: rpc.total_supply_near,
+          epochStartHeight: numField(ep, "epoch_start_height"),
+          epochLengthBlocks: numField(rpc, "epoch_length_blocks"),
+          mintedPerEpoch: numField(ep, "minted_per_epoch_near"),
+          epochHours: numField(ep, "epoch_duration_hours"),
+        }
+      : null;
+
   return {
+    supplyTicker,
     bullCase,
     trailing30d: trailing30d(fees),
     generatedAtUtc: snapshot.generated_at_utc,

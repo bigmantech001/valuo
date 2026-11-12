@@ -165,6 +165,10 @@ body {
   input[type="range"] {
     min-height: 28px;
   }
+  /* The track colour is the input's own background, so redraw it as a 2px line inside the taller box. */
+  input[type="range"].valuo-range {
+    background: linear-gradient(var(--color-border-strong), var(--color-border-strong)) center / 100% 2px no-repeat;
+  }
   /* Grid and flex children may not grow wider than the screen because of one long line. */
   main :where(div, section, article, li) {
     min-width: 0;

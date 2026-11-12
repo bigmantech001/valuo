@@ -1,4 +1,5 @@
 import { CalibrationPanel, REGIME_NAME, EngineWaterfall, McFanCharts, PeerCompsTable, PercentileTable, RelativeValue, ScenarioWithForecast, SensitivityGrid, VerdictStrip, WhatYouHaveToBelieve, type RegimeOption } from "@/components/tab4";
+import { WidePeerSet } from "@/components/tab4/WidePeerSet";
 import { Card } from "@/components/ui";
 import { fmtNear, fmtPct } from "@/lib/format";
 import { verifyPort, type SotpSnapshotSlice } from "@/lib/quantClient";
@@ -61,6 +62,7 @@ export function Tab4Sotp({ snapshot, manifest }: TabProps) {
       <EngineWaterfall sotp={sotp} />
       <SensitivityGrid slice={slice} portCheck={portCheck} />
       {snapshot.relative_value ? <RelativeValue data={snapshot.relative_value} /> : <PeerCompsTable comps={snapshot.comps} sotp={sotp} />}
+      <WidePeerSet data={snapshot.wide_peers} comps={snapshot.comps} />
       <CalibrationPanel snapshot={snapshot} manifest={manifest} />
     </div>
   );

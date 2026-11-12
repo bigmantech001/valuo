@@ -18,7 +18,7 @@ export function Hero({ data, headroomHistory = [] }: { data: LandingData | null;
   const mi = data?.marketImplied ?? null;
   return (
     <section className="border-b border-border">
-      <div className="mx-auto grid max-w-none gap-14 px-6 lg:px-[5vw] pb-20 pt-16 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16 lg:pb-24 lg:pt-24">
+      <div className="mx-auto grid max-w-none gap-14 px-6 lg:px-[5vw] pb-20 pt-8 sm:pt-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16 lg:pb-24 lg:pt-12">
         <div className="flex min-w-0 flex-col justify-center">
           <p className="text-[14px] text-muted">NEAR Hackathon 2026 &middot; Investment thesis track</p>
           <h1 className="mt-5 max-w-[18ch] font-serif text-[42px] font-medium leading-[1.06] tracking-tight text-ink sm:text-[54px] lg:text-[58px]">

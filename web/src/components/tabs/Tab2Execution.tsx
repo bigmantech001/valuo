@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import { ActorAudit, hhiBand } from "@/components/tab2/ActorAudit";
+import { FeePoolShare } from "@/components/tab2/FeePoolShare";
+import { LiquidityLadder } from "@/components/tab2/LiquidityLadder";
 import { LiveRace } from "@/components/tab2/LiveRace";
 import { MoatMatrix } from "@/components/tab2/MoatMatrix";
 import type { SnapshotCellRef } from "@/components/tab2/RaceResult";
 import { SpreadMatrix } from "@/components/tab2/SpreadMatrix";
+import { TakeRateSeries } from "@/components/tab2/TakeRateSeries";
 import { archetypePhrase, signTone } from "@/components/tab2/benchUtil";
 import { Card, Stat } from "@/components/ui";
 import { MethodNote, SectionIntro, StatGrid } from "@/components/ui/Section";
@@ -157,6 +160,7 @@ export function Tab2Execution({ snapshot, manifest }: TabProps) {
           </SubHead>
           <MoatMatrix bench={bench} />
           <SpreadMatrix bench={bench} quoteRecordCount={quoteRecordCount} />
+          <LiquidityLadder data={snapshot.liquidity_ladder} />
           <MethodNote>
             <p>
               <span className="text-ink">Headroom.</span> {bench.headroom_definition ?? "(out_1click - out_best_competitor) / out_best_competitor x 1e4 on destination units for the same raw input"}. Basis{" "}
@@ -186,6 +190,10 @@ export function Tab2Execution({ snapshot, manifest }: TabProps) {
           </MethodNote>
         </section>
       ) : null}
+
+      <FeePoolShare data={snapshot.fee_pool_share} />
+
+      <TakeRateSeries data={snapshot.take_rate_series} />
 
       {/* 4. Settlement audit */}
       <section className="space-y-6">

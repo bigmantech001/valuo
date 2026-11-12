@@ -3,7 +3,7 @@ import { fmtInt, fmtUtc } from "@/lib/format";
 import { loadArtifacts } from "@/lib/snapshot";
 import { loadHistory } from "@/lib/history";
 import { ManifestProvider } from "@/components/provenance/ManifestContext";
-import { BearPreview, Findings, Hero, LandingNav, Method, Questions, Reproduce, Scorecard, TerminalPreview, buildLandingData } from "@/components/landing";
+import { BearPreview, Findings, Hero, LandingNav, Method, Questions, Reproduce, Scorecard, SupplyTicker, TerminalPreview, buildLandingData } from "@/components/landing";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,7 @@ export default async function LandingPage() {
       <LandingNav />
       <main>
         <Hero data={data} headroomHistory={headroomHistory} />
+        {data ? <SupplyTicker ticker={data.supplyTicker} /> : null}
         {data ? <Findings data={data} /> : null}
         <Questions data={data} />
         <Method data={data} />

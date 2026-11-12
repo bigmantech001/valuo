@@ -27,6 +27,11 @@ A second variant replaces the registry drift with the trailing mean monthly log 
 (``volume_monthly_mean_log_return``), so a reader can see whether the registry growth assumption (set with the full
 history in view) helps or hurts. The live-model variant is the headline.
 
+A second ENGINE is scored next to the GBM under the same protocol (``with_engines=True``, the default of
+``backtest_from_raw``): a stationary block bootstrap of realized daily log-changes
+(``valuo.models.volume_bootstrap``). It adds the keys ``engines``, ``comparison`` and ``valuation_effect``; every
+existing key keeps its meaning and value, and the valuation keeps the GBM. ``bootstrap_claim`` grades it.
+
 Pure: no network, no file IO. ``backtest_from_raw`` is the thin loader used by ``reproduce.py``.
 """
 from __future__ import annotations
@@ -41,14 +46,18 @@ from statistics import median
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
+
 from valuo import assumptions as A
 from valuo.collectors.intents_forensics import _chart_points, volume_volatility
+from valuo.models import volume_bootstrap as vb
 from valuo.models.sotp_valuation import DAYS_PER_MONTH, _sigmas
 from valuo.schemas import Assumption
 
 __all__ = [
     "HORIZONS_MONTHS", "STEP_DAYS", "WINDOW_DAYS", "SIGMA_LOOKBACK_DAYS", "TARGET_COVERAGE", "PIT_BINS",
     "NOT_TESTED", "forecast_at_origin", "lognormal_bands", "run_backtest", "backtest_from_raw", "load_dexs_chart",
+    "bootstrap_claim", "FORWARD_HORIZON_MONTHS",
 ]
 
 # Backtest design (methodology, not model inputs).
@@ -61,6 +70,7 @@ PIT_BINS: int = 5
 _Z90 = 1.2815515655446004      # Phi^-1(0.9)
 _Z95 = 1.6448536269514722      # Phi^-1(0.95), for the 90% Wilson interval
 DEXS_RAW_NAME = "defillama__dexs_near-intents.json"
+FORWARD_HORIZON_MONTHS: int = 12  # valuation-effect horizon: 30-day volume 12 months after the latest origin
 
 NOT_TESTED: tuple[str, ...] = (
     "fee take rate (public and confidential) and its compression toward the floor",
@@ -222,12 +232,17 @@ def run_backtest(
     as_of_ts: int | None = None,
     source: str = "defillama:dexs/near-intents totalDataChart",
     source_sha256: str | None = None,
+    with_engines: bool = False,
 ) -> dict[str, Any]:
     """Rolling-origin backtest of the volume engine on a daily USD chart [[unix_s, usd], ...]. Pure.
 
     ``as_of_ts`` drops days that were not complete at that instant (the partial current UTC day). Origins start
     at the first day where the live calibration has a measured monthly sigma (two monthly returns, 90 days) and
     step back from the last complete day every ``step_days``.
+
+    ``with_engines`` also scores the block-bootstrap engine on the same origins and targets and adds ``engines``,
+    ``comparison`` and ``valuation_effect``. It never changes the keys above it and never raises: on a fault those
+    three keys are null and ``engines_error`` says why.
     """
     reg = assumptions if assumptions is not None else A.ASSUMPTIONS
     points = _chart_points(chart)
@@ -283,6 +298,11 @@ def run_backtest(
         }
     base["calibrated"] = _verdict(live["by_horizon"])
     base["headline"] = _headline(base)
+    if with_engines:
+        try:
+            base.update(_engines_block(points, origins, live, growth_yoy=growth_yoy, horizons=horizons, assumptions=reg))
+        except Exception as exc:  # noqa: BLE001 - the variant engine must never cost the run its base backtest
+            base.update({"engines": None, "comparison": None, "valuation_effect": None, "engines_error": f"{type(exc).__name__}: {exc}"})
     return base
 
 
@@ -312,6 +332,309 @@ def _headline(bt: Mapping[str, Any]) -> str:
         + ("the model under-predicts" if bias > 1 else "the model over-predicts" if bias < 1 else "no bias") + ")"
     )
     return f"P10-P90 coverage (target 80%): {', '.join(parts) or 'no scored forecasts'}{bias_txt}."
+
+
+# ---------------------------------------------------------------------------- second engine: block bootstrap
+_BOOT_ROW_MODES: tuple[str, ...] = ("resampled", "registry")
+
+
+def _bootstrap_rows(points: list[tuple[int, float]], origins: list[int], *, growth_yoy: float, horizons: Sequence[int],
+                    block_rule: str) -> tuple[dict[str, list[dict[str, Any]]], list[float]]:
+    """Score the bootstrap on the GBM's origins and targets. Rows per drift convention, plus the mean block length per origin."""
+    last = len(points) - 1
+    values = np.array([v for _, v in points], dtype=float)
+    days = {int(h): int(round(h * DAYS_PER_MONTH)) for h in horizons}
+    rows: dict[str, list[dict[str, Any]]] = {m: [] for m in _BOOT_ROW_MODES}
+    blocks: list[float] = []
+    for i in origins:
+        need = [d for d in days.values() if i + d <= last]
+        if not need:
+            continue
+        fc = vb.forecast_at_origin(values[: i + 1], origin_ts=points[i][0], horizon_days=need, growth_yoy=growth_yoy, block_rule=block_rule)
+        if fc is None:
+            continue
+        blocks.append(float(fc["mean_block_days"]))
+        for h, d in days.items():
+            j = i + d
+            if j > last:
+                continue
+            realized = sum(v for _, v in points[j - WINDOW_DAYS + 1: j + 1])
+            if realized <= 0:
+                continue
+            for mode in _BOOT_ROW_MODES:
+                smp = fc["horizons"][d][mode]
+                if smp is None:
+                    continue
+                p10, p50, p90 = (float(x) for x in np.quantile(smp, [0.10, 0.50, 0.90]))
+                rows[mode].append({
+                    "origin_date": _iso_day(points[i][0]), "target_date": _iso_day(points[j][0]), "h": h,
+                    "v0_30d_usd": fc["v0_30d_usd"], "last_day_usd": fc["last_day_usd"], "n_changes": fc["n_changes"],
+                    "mean_block_days": fc["mean_block_days"],
+                    "p10": p10, "p50": p50, "p90": p90, "mean": float(smp.mean()),
+                    "realized_30d_usd": realized, "inside": p10 <= realized <= p90,
+                    "log_error": math.log(realized / p50),
+                    "pit": (float(np.searchsorted(smp, realized, side="right")) + 0.5) / (smp.size + 1.0),
+                })
+    return rows, blocks
+
+
+def _band_widths(rows: list[dict[str, Any]], horizons: Sequence[int]) -> dict[str, float | None]:
+    """Median ln(P90 / P10) per horizon: the sharpness of the band (a wider band covers more for a trivial reason)."""
+    out: dict[str, float | None] = {}
+    for h in horizons:
+        w = [math.log(r["p90"] / r["p10"]) for r in rows if r["h"] == h and r["p10"] > 0]
+        out[str(h)] = median(w) if w else None
+    return out
+
+
+def _scored(rows: list[dict[str, Any]], horizons: Sequence[int]) -> dict[str, Any]:
+    by_h = {str(h): _horizon_stats([r for r in rows if r["h"] == h]) for h in horizons}
+    return {"by_horizon": by_h, "calibrated": _verdict(by_h), "median_band_width_log": _band_widths(rows, horizons)}
+
+
+def _block_summary(blocks: list[float]) -> dict[str, float] | None:
+    return {"min": min(blocks), "median": median(blocks), "max": max(blocks)} if blocks else None
+
+
+def _test_power(n: int, target: float = TARGET_COVERAGE, level: float = 0.10) -> dict[str, Any] | None:
+    """What the exact binomial test can and cannot see at sample size n: its acceptance region and its rejection rates."""
+    if n <= 0:
+        return None
+    pvals = [_binom_two_sided_p(k, n, target) for k in range(n + 1)]
+    accept = [k for k, p in enumerate(pvals) if p is not None and p >= level]
+
+    def _reject_prob(c: float) -> float:
+        return sum(math.comb(n, k) * c**k * (1 - c) ** (n - k) for k in range(n + 1) if k not in accept)
+
+    return {
+        "n": n, "level": level, "accept_min": min(accept) if accept else None, "accept_max": max(accept) if accept else None,
+        "reject_prob_if_true_60": _reject_prob(0.60), "reject_prob_if_true_70": _reject_prob(0.70),
+        "reject_prob_if_true_80": _reject_prob(target),
+    }
+
+
+def _cov_text(by_h: Mapping[str, Mapping[str, Any]]) -> str:
+    p_txt = lambda p: "<0.01" if p < 0.005 else f"{p:.2f}"  # noqa: E731
+    parts = [f"{h}m {s['inside']}/{s['n']} ({_pct(s['coverage_p10_p90'])}, p {p_txt(s['binom_p_vs_80'])})" for h, s in by_h.items() if s.get("n")]
+    return ", ".join(parts) or "no scored forecasts"
+
+
+def _comparison(gbm: Mapping[str, Any], boot: Mapping[str, Any]) -> dict[str, Any]:
+    g_by, b_by = gbm["by_horizon"], boot["by_horizon"]
+    g_flag, b_flag = gbm["calibrated"]["per_horizon"], boot["calibrated"]["per_horizon"]
+    per: dict[str, Any] = {}
+    for h in b_by:
+        gw, bw = (gbm["median_band_width_log"] or {}).get(h), (boot["median_band_width_log"] or {}).get(h)
+        per[h] = {
+            **{name: {
+                "n": s.get("n", 0), "inside": s.get("inside", 0), "coverage_p10_p90": s.get("coverage_p10_p90"),
+                "binom_p_vs_80": s.get("binom_p_vs_80"), "calibrated": flag.get(h),
+                "median_ratio_realized_to_p50": s.get("median_ratio_realized_to_p50"),
+                "below_p10": s.get("below_p10", 0), "above_p90": s.get("above_p90", 0),
+            } for name, s, flag in (("gbm", g_by.get(h) or {}, g_flag), ("block_bootstrap", b_by[h], b_flag))},
+            "band_width_ratio_bootstrap_to_gbm": (bw / gw) if (gw and bw) else None,
+        }
+    scored = [h for h, s in b_by.items() if s.get("n")]
+    ok = [h for h in scored if b_flag.get(h) is True]
+    rejected = [h for h in scored if b_flag.get(h) is False]
+    over = [h for h in rejected if b_by[h]["coverage_p10_p90"] > TARGET_COVERAGE]
+    under = [h for h in rejected if h not in over]
+    g_scored = [h for h, s in g_by.items() if s.get("n")]
+    g_rejected = [h for h in g_scored if g_flag.get(h) is False]
+    first = scored[0] if scored else None
+    n1 = b_by[first]["n"] if first else 0
+    ratios = [per[h]["band_width_ratio_bootstrap_to_gbm"] for h in scored if per[h]["band_width_ratio_bootstrap_to_gbm"] is not None]
+    width = "" if not ratios else (
+        f"{min(ratios):.1f}x" if max(ratios) - min(ratios) < 0.05 else f"{min(ratios):.1f}x to {max(ratios):.1f}x"
+    ) + " the GBM's log width"
+    b_txt, g_txt = _cov_text(b_by), _cov_text(g_by)
+    months = lambda hs: " and ".join(f"{h}m" for h in hs)  # noqa: E731
+    gbm_side = (
+        f"the GBM is rejected at {len(g_rejected)} of {len(g_scored)} horizons ({g_txt})" if g_rejected
+        else f"the GBM is not rejected ({g_txt})"
+    )
+    if not scored:
+        outcome, headline = "not_scored", "The block bootstrap produced no scored forecasts, so it neither answers nor repeats the GBM's failure."
+    elif not rejected:
+        outcome = "bootstrap_passes_low_power"
+        headline = (
+            f"Block-bootstrap P10-P90 coverage is not rejected against {_pct(TARGET_COVERAGE)} at any scored horizon ({b_txt}) while {gbm_side}; "
+            f"with {n1} origins and overlapping forecasts beyond one month the test has low power, so this is weak evidence of calibration"
+            + (f", and the bootstrap band is {width}" if width else "") + "."
+        )
+    else:
+        outcome = "bootstrap_fails" if not ok else "bootstrap_mixed"
+        why = []
+        if over:
+            why.append(f"over-coverage at {months(over)}")
+        if under:
+            why.append(f"under-coverage at {months(under)}")
+        passes = "" if not ok else (
+            f"; the pass at {months(ok)} rests on {' and '.join(str(b_by[h]['n']) for h in ok)} overlapping forecasts, which is weak evidence"
+            if all(h != "1" for h in ok) else f"; the pass at {months(ok)} rests on about {n1} origins, which is weak evidence"
+        )
+        wide = "" if not width else (
+            f"; its band is {width}, so it covers by being wide, not by being sharp" if over and not under else f"; its band is {width}"
+        )
+        headline = (
+            f"The block bootstrap does not repair the volume engine: P10-P90 coverage ({b_txt}) is rejected against {_pct(TARGET_COVERAGE)} for "
+            f"{' and '.join(why)}{passes}{wide}; {gbm_side}"
+            + (", so the two engines bracket realized dispersion and neither is calibrated." if over and not under and g_rejected else ".")
+        )
+    return {
+        "headline": headline, "outcome": outcome,
+        "failure_direction": None if not rejected else "over_coverage" if not under else "under_coverage" if not over else "both",
+        "per_horizon": per, "power_1m": _test_power(n1) if first else None,
+        "power_horizon_months": int(first) if first else None,
+        "same_sample": all((g_by.get(h) or {}).get("n") == b_by[h].get("n") for h in b_by),
+    }
+
+
+def _ratios(q: Mapping[str, float], denom: float) -> dict[str, float]:
+    return {f"{k}": float(q[k]) / denom for k in ("p10", "p50", "p90", "mean")}
+
+
+def _forward_volume_effect(points: list[tuple[int, float]], *, growth_yoy: float, assumptions: Mapping[str, Assumption] | None) -> dict[str, Any] | None:
+    """30-day volume ``FORWARD_HORIZON_MONTHS`` after the latest complete day, as multiples of the current 30-day volume, per engine."""
+    h = FORWARD_HORIZON_MONTHS
+    fc = forecast_at_origin(points, growth_yoy=growth_yoy, horizons=[h], assumptions=assumptions)
+    if fc is None:
+        return None
+    v30 = float(fc["v0_30d_usd"])
+    d = int(round(h * DAYS_PER_MONTH))
+    boot = vb.forecast_at_origin([v for _, v in points], origin_ts=points[-1][0], horizon_days=[d], growth_yoy=growth_yoy)
+    out: dict[str, Any] = {
+        "origin_date": fc["origin_date"], "current_30d_usd": v30, "horizon_months": h, "horizon_days": d,
+        "gbm": {**_ratios(fc["horizons"][h], v30), "sigma_volume_monthly": fc["sigma_volume_monthly"], "drift": "registry"},
+        "block_bootstrap_registry_drift": None, "block_bootstrap_resampled_drift": None,
+        "unit": "multiple of the current trailing 30-day volume",
+    }
+    if boot is not None:
+        for key, mode in (("block_bootstrap_registry_drift", "registry"), ("block_bootstrap_resampled_drift", "resampled")):
+            smp = boot["horizons"][d][mode]
+            if smp is not None:
+                q = np.quantile(smp, [0.10, 0.50, 0.90])
+                out[key] = {"p10": float(q[0]) / v30, "p50": float(q[1]) / v30, "p90": float(q[2]) / v30, "mean": float(smp.mean()) / v30}
+        out.update({"mean_block_days": boot["mean_block_days"], "n_changes": boot["n_changes"], "last_day_usd": boot["last_day_usd"],
+                    "daily_mean_log_change": boot["daily_mean_log_change"]})
+    return out
+
+
+def _valuation_headline(ve: Mapping[str, Any], comparison: Mapping[str, Any] | None = None) -> str:
+    """One sentence: what swapping the engine does to the forward distribution, and how far to trust it given the backtest."""
+    vol = ve.get("volume_12m") or {}
+    g, b = vol.get("gbm"), vol.get("block_bootstrap_registry_drift")
+    if not (isinstance(g, Mapping) and isinstance(b, Mapping)):
+        return "The valuation uses the GBM; the bootstrap's forward volume band could not be computed in this run."
+
+    def spread(q: Mapping[str, float]) -> float:
+        return math.log(q["p90"] / q["p10"])
+
+    rel = spread(b) / spread(g) if spread(g) > 0 else float("nan")
+    txt = (
+        f"The valuation uses the GBM. At the same expected path the bootstrap puts 30-day volume 12 months out at "
+        f"{b['p10']:.2f}x / {b['p50']:.2f}x / {b['p90']:.2f}x of current (P10 / P50 / P90) against the GBM's "
+        f"{g['p10']:.2f}x / {g['p50']:.2f}x / {g['p90']:.2f}x, a band {rel:.1f}x as wide in log terms"
+    )
+    fdv = ve.get("fdv") or {}
+    if fdv.get("computed"):
+        r = fdv["ratio_to_gbm"]
+        txt += f"; through the same Monte Carlo FDV P10 / P50 / P90 becomes {r['p10']:.2f}x / {r['p50']:.2f}x / {r['p90']:.2f}x of the base"
+    else:
+        txt += "; the FDV effect is not computed"
+    outcome = (comparison or {}).get("outcome")
+    direction = (comparison or {}).get("failure_direction")
+    if direction == "over_coverage":
+        txt += (
+            ". The backtest rejects the bootstrap for over-coverage, so read this as a stress bound on volume dispersion (with the mean "
+            "path held fixed, a wider distribution lowers the median), not as a better central estimate"
+        )
+    elif outcome == "bootstrap_passes_low_power":
+        txt += ". The bootstrap is not rejected out of sample but on a small sample, so this is a variant to weigh, not a replacement"
+    elif outcome in ("bootstrap_fails", "bootstrap_mixed"):
+        txt += ". The backtest rejects the bootstrap as well, so this is a sensitivity, not a better estimate"
+    return txt + "."
+
+
+def _engines_block(points: list[tuple[int, float]], origins: list[int], live: Mapping[str, Any], *, growth_yoy: float,
+                   horizons: Sequence[int], assumptions: Mapping[str, Assumption] | None) -> dict[str, Any]:
+    """``engines`` (GBM as already scored, block bootstrap and its variants), ``comparison`` and ``valuation_effect``."""
+    rows, blocks = _bootstrap_rows(points, origins, growth_yoy=growth_yoy, horizons=horizons, block_rule="politis_white")
+    rot_rows, rot_blocks = _bootstrap_rows(points, origins, growth_yoy=growth_yoy, horizons=horizons, block_rule="rule_of_thumb")
+    gbm = {
+        "label": "GBM with measured sigma and registry drift (the engine the valuation uses)", "drift": "registry",
+        "used_by_valuation": True, "by_horizon": live["by_horizon"], "calibrated": _verdict(live["by_horizon"]),
+        "median_band_width_log": _band_widths(live["rows"], horizons),
+    }
+    boot = {
+        "label": "Stationary block bootstrap of daily log-changes, resampled drift", "drift": "resampled",
+        "used_by_valuation": False, "method": vb.METHOD, "block_length_rule": "politis_white", "n_paths": vb.N_PATHS,
+        "seed": vb.SEED, "lookback_days": vb.LOOKBACK_DAYS, "mean_block_days": _block_summary(blocks),
+        **_scored(rows["resampled"], horizons), "rows": rows["resampled"],
+        "variants": {
+            "registry_drift": {
+                "label": "Block bootstrap, demeaned and rescaled to the GBM's expected path (shape only; the form fed to the Monte Carlo)",
+                **_scored(rows["registry"], horizons),
+            },
+            "rule_of_thumb_blocks": {
+                "label": "Sensitivity: mean block length n^(1/3) instead of the Politis-White selector (resampled drift)",
+                "mean_block_days": _block_summary(rot_blocks), **_scored(rot_rows["resampled"], horizons),
+            },
+        },
+        "caveats": list(vb.CAVEATS),
+    }
+    ve: dict[str, Any] = {
+        "engine_used_by_valuation": "gbm",
+        "volume_12m": _forward_volume_effect(points, growth_yoy=growth_yoy, assumptions=assumptions),
+        "fdv": {"computed": False, "reason": "needs the snapshot's SOTP inputs; computed by backtest_from_raw"},
+    }
+    comparison = _comparison(gbm, boot)
+    ve["headline"] = _valuation_headline(ve, comparison)
+    return {
+        "engines": {"target_coverage": TARGET_COVERAGE, "rule": gbm["calibrated"]["rule"], "gbm": gbm, "block_bootstrap": boot},
+        "comparison": comparison, "valuation_effect": ve, "engines_error": None,
+    }
+
+
+def bootstrap_claim(bt: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Scorecard row for the block-bootstrap engine: DERIVED only when its coverage is not rejected at every scored horizon.
+
+    Fields claim / status / value / source / confidence / note. None when the engine was not computed.
+    """
+    engines = bt.get("engines")
+    if not isinstance(engines, Mapping) or not isinstance(engines.get("block_bootstrap"), Mapping):
+        return None
+    boot, gbm = engines["block_bootstrap"], engines.get("gbm") or {}
+    b_by, g_by = boot.get("by_horizon") or {}, gbm.get("by_horizon") or {}
+    scored = [h for h, s in b_by.items() if s.get("n")]
+    flags = (boot.get("calibrated") or {}).get("per_horizon") or {}
+    ok = bool(scored) and all(flags.get(h) is True for h in scored)
+    per = (bt.get("comparison") or {}).get("per_horizon") or {}
+    first = scored[0] if scored else None
+    ratio = (per.get(first) or {}).get("band_width_ratio_bootstrap_to_gbm") if first else None
+    shape = ((boot.get("variants") or {}).get("registry_drift") or {}).get("by_horizon") or {}
+    power = (bt.get("comparison") or {}).get("power_1m") or {}
+    value = (
+        f"block bootstrap {_cov_text(b_by)}; GBM {_cov_text(g_by)}; bootstrap at the GBM's expected path (shape only) {_cov_text(shape)}"
+        + ("" if ratio is None else f"; bootstrap band {ratio:.1f}x the GBM's log width at {first}m")
+        + f"; {bt.get('n_origins', 0)} monthly origins {bt.get('first_origin')} to {bt.get('last_origin')}"
+    )
+    sha = f" sha256 {str(bt['source_sha256'])[:12]}..." if bt.get("source_sha256") else ""
+    note = (
+        "Inside P10-P90 against an 80% target, exact two-sided binomial p. Low power: "
+        + (f"at n = {power['n']} the test accepts {power.get('accept_min')} to {power.get('accept_max')} hits and rejects a 70%-coverage engine only "
+           f"{_pct(power.get('reject_prob_if_true_70'))} of the time; " if power.get("n") else "")
+        + "3m and 6m forecasts overlap. Block length (Politis-White) and path count were fixed before coverage was computed; nothing is tuned. "
+        "The valuation still uses the GBM; this row grades a parallel variant and tests the volume distribution only."
+    )
+    return {
+        "claim": "A block-bootstrap volume engine (fat tails, autocorrelation) is calibrated out of sample where GBM is not",
+        "status": "DERIVED" if ok else "NOT_SUPPORTED",
+        "value": value,
+        "source": f"{bt.get('source')}{sha}; valuo.models.volume_bootstrap (seed {boot.get('seed')}, {boot.get('n_paths')} paths per origin)",
+        "confidence": "low",
+        "note": note,
+    }
 
 
 # ---------------------------------------------------------------------------- loader for reproduce.py
@@ -348,4 +671,15 @@ def backtest_from_raw(snapshot: Mapping[str, Any], raw_dir: Path | None = None) 
             as_of = int(datetime.fromisoformat(gen.replace("Z", "+00:00")).timestamp())
         except ValueError:
             as_of = None
-    return run_backtest(chart, growth_yoy=A.value("public_volume_growth_yoy", reg), assumptions=reg, as_of_ts=as_of, source=source, source_sha256=sha)
+    bt = run_backtest(chart, growth_yoy=A.value("public_volume_growth_yoy", reg), assumptions=reg, as_of_ts=as_of, source=source,
+                      source_sha256=sha, with_engines=True)
+    ve = bt.get("valuation_effect")
+    if isinstance(ve, dict):
+        # FDV under bootstrap volume paths: a separate code path that reads the snapshot and never writes to sotp.
+        try:
+            points = [p for p in _chart_points(chart) if as_of is None or p[0] + 86400 <= as_of]
+            ve["fdv"] = vb.fdv_effect(snapshot, [v for _, v in points], origin_ts=points[-1][0])
+        except Exception as exc:  # noqa: BLE001 - never fatal; the volume-distribution effect above still stands
+            ve["fdv"] = {"computed": False, "reason": f"{type(exc).__name__}: {exc}"}
+        ve["headline"] = _valuation_headline(ve, bt.get("comparison"))
+    return bt

@@ -14,6 +14,10 @@
  *    snapshot written before the emitting code landed will not carry them. Anything else goes
  *    through `getExtra()`.
  */
+import type { WidePeers } from "./widePeers";
+import type { FeePoolShare } from "./feePool";
+import type { LiquidityLadder } from "./liquidityLadder";
+import type { TakeRateSeries } from "./takeRateSeries";
 
 export const SCHEMA_VERSION = "1.0.0";
 
@@ -1402,6 +1406,10 @@ export interface Snapshot {
   backtest?: VolumeBacktest | null;
   // bull_case.py: the long-term case as falsifiable conditions graded against live data.
   bull_case?: BullCase | null;
+  fee_pool_share?: FeePoolShare | null; // collectors/fee_pool.py: NEAR Intents' share of DefiLlama-covered cross-chain routing fees
+  wide_peers?: WidePeers | null; // collectors/wide_peers.py: FDV to revenue across the top revenue chains (additive view)
+  liquidity_ladder?: LiquidityLadder | null; // collectors/liquidity_ladder.py: largest size each router quotes per corridor, $1K to $5M
+  take_rate_series?: TakeRateSeries | null; // models/take_rate_series.py: rolling 30d realized take rate, trend and elasticity to volume
 }
 
 // --------------------------------------------------------------------------- bull case (bull_case.py)
@@ -1507,6 +1515,86 @@ export type VolumeBacktest = {
   by_period?: { split_origin_date: string; rule: string; early: Record<string, BacktestHorizonStats>; late: Record<string, BacktestHorizonStats> };
   calibrated: { per_horizon: Record<string, boolean | null>; all: boolean; rule: string };
   headline: string;
+  /** Second volume engine scored on the same origins (quant/valuo/models/volume_bootstrap.py). Absent in older snapshots. */
+  engines?: VolumeBacktestEngines | null;
+  comparison?: VolumeEngineComparison | null;
+  valuation_effect?: VolumeEngineValuationEffect | null;
+  engines_error?: string | null;
+};
+
+type BacktestCalibration = { per_horizon: Record<string, boolean | null>; all: boolean; rule: string };
+type BacktestTriple = { p10: number; p50: number; p90: number; mean?: number | null };
+
+/** One scored engine or variant: per-horizon stats, verdict and the median log width of its P10 to P90 band. */
+export type VolumeEngineScore = {
+  label: string;
+  by_horizon: Record<string, BacktestHorizonStats>;
+  calibrated: BacktestCalibration;
+  median_band_width_log?: Record<string, number | null>;
+  mean_block_days?: { min: number | null; median: number | null; max: number | null };
+};
+
+export type VolumeBacktestEngines = {
+  target_coverage: number;
+  rule: string;
+  gbm: VolumeEngineScore & { drift?: string; used_by_valuation: boolean };
+  block_bootstrap: VolumeEngineScore & {
+    drift?: string;
+    used_by_valuation: boolean;
+    method: string;
+    block_length_rule: string;
+    n_paths: number;
+    seed: number;
+    lookback_days: number;
+    variants?: { registry_drift?: VolumeEngineScore; rule_of_thumb_blocks?: VolumeEngineScore };
+    caveats?: string[];
+  };
+};
+
+type VolumeEngineCell = {
+  n: number;
+  inside: number;
+  coverage_p10_p90: number | null;
+  binom_p_vs_80: number | null;
+  calibrated: boolean | null;
+  median_ratio_realized_to_p50: number | null;
+  below_p10: number;
+  above_p90: number;
+};
+
+export type VolumeEngineComparison = {
+  headline: string;
+  outcome: string;
+  failure_direction?: string | null;
+  per_horizon: Record<string, { gbm: VolumeEngineCell; block_bootstrap: VolumeEngineCell; band_width_ratio_bootstrap_to_gbm: number | null }>;
+  power_1m?: { n: number; level: number; accept_min: number; accept_max: number; reject_prob_if_true_60: number; reject_prob_if_true_70: number; reject_prob_if_true_80: number } | null;
+  same_sample?: boolean;
+};
+
+export type VolumeEngineValuationEffect = {
+  engine_used_by_valuation: string;
+  /** P10/P50/P90 of trailing-30-day volume 12 months ahead, as multiples of the current 30-day volume */
+  volume_12m?: {
+    origin_date: string;
+    current_30d_usd: number;
+    horizon_months: number;
+    gbm: BacktestTriple;
+    block_bootstrap_registry_drift?: BacktestTriple | null;
+    block_bootstrap_resampled_drift?: BacktestTriple | null;
+    mean_block_days?: number | null;
+  } | null;
+  /** SOTP FDV with the bootstrap volume paths swapped in; `computed: false` carries a `reason` instead */
+  fdv?: {
+    computed: boolean;
+    reason?: string;
+    n_paths?: number;
+    horizon_months?: number;
+    base_reproduces_snapshot?: boolean;
+    gbm?: BacktestTriple;
+    block_bootstrap?: BacktestTriple;
+    ratio_to_gbm?: BacktestTriple;
+  } | null;
+  headline?: string | null;
 };
 
 // --------------------------------------------------------------------------- chain signatures (v1.signer)

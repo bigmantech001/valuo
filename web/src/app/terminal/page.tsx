@@ -43,7 +43,7 @@ export default async function TerminalPage() {
     <ManifestProvider manifest={manifest}>
       <DrawerProvider>
       <ProvenanceBar snapshot={barSnapshot} manifest={manifest} initialIntegrity={integrity} />
-      <main className="mx-auto w-full max-w-none px-4 sm:px-6 lg:px-[5vw] pb-24 pt-5 lg:pt-6">
+      <main className="mx-auto w-full max-w-none px-4 sm:px-6 lg:px-[1.25vw] pb-24 pt-5 lg:pt-6">
         {/* Page-level heading for screen-reader navigation; the visible brand lives in the provenance bar. */}
         <h1 className="sr-only">Valuo NEAR Investment Committee terminal</h1>
         {snapshot ? (
@@ -90,7 +90,7 @@ export default async function TerminalPage() {
         )}
       </main>
       <footer className="border-t border-border bg-surface">
-        <div className="mx-auto flex max-w-none flex-wrap items-baseline justify-between gap-x-8 gap-y-2 px-6 lg:px-[5vw] py-6 text-[13px] text-muted">
+        <div className="mx-auto flex max-w-none flex-wrap items-baseline justify-between gap-x-8 gap-y-2 px-4 sm:px-6 lg:px-[1.25vw] py-6 text-[13px] text-muted">
           <p className="max-w-xl">
             <Link href="/" className="font-serif text-[15px] text-ink hover:text-accent">
               Valuo

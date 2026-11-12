@@ -233,7 +233,8 @@ def test_attach_derived_models_populates_keys_and_records_timings():
     timings: dict[str, float] = {}
     warnings = rp.attach_derived_models(snap, timings)
     assert warnings == []
-    assert set(timings) == {"market_implied", "sensitivity", "relative_value", "bull_case", "backtest"}
+    assert set(timings) >= {"market_implied", "sensitivity", "relative_value", "bull_case", "backtest"}
+    assert set(timings) - {"market_implied", "sensitivity", "relative_value", "bull_case", "backtest"} == {k for k, _fn in rp.RAW_DERIVED_MODELS}
     assert snap.market_implied["solves"] and snap.sensitivity["rows"] and snap.relative_value["coverage"] and snap.bull_case["conditions"]
     # no raw_dir given: the backtest falls back to the 365-day series in the snapshot and adds one scorecard claim
     assert snap.backtest["by_horizon"]["1"]["n"] > 0

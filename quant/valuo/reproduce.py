@@ -43,11 +43,14 @@ from valuo.models.volume_growth import apply_measured_growth, measure_volume_gro
 from valuo.collectors.chain_signatures import PER_PAGE as PER_PAGE_CS, collect_chain_signatures
 from valuo.collectors.comps import collect_comps_async, multiple
 from valuo.collectors.execution_bench import collect_execution_bench
+from valuo.collectors.fee_pool import collect_fee_pool, scorecard_claim as fee_pool_claim
+from valuo.collectors.liquidity_ladder import collect_liquidity_ladder, scorecard_claim as liquidity_ladder_claim
 from valuo.collectors.intents_forensics import (
     IntentsForensicsError,
     collect_intents_forensics_async,
 )
 from valuo.collectors.near_rpc import collect_near_rpc
+from valuo.collectors.wide_peers import collect_wide_peers, scorecard_claim as wide_peers_claim
 from valuo.memo_generator import (
     README_FINDINGS_END,
     README_FINDINGS_START,
@@ -60,7 +63,7 @@ from valuo.memo_generator import (
     render_readme_findings,
 )
 from valuo import history
-from valuo.models.backtest import backtest_from_raw
+from valuo.models.backtest import backtest_from_raw, bootstrap_claim
 from valuo.models.bear_case import THIN_SOLVER_SAMPLE_FILLS, live_metrics, run_bear_case
 from valuo.models.market_implied import run_market_implied
 from valuo.models.relative_value import run_relative_value
@@ -68,6 +71,7 @@ from valuo.models.bull_case import run_bull_case
 from valuo.models.sensitivity import run_sensitivity
 from valuo.models.sotp_valuation import build_inputs, deterministic_sotp, run_sotp
 from valuo.models.supply_physics import run_supply_physics
+from valuo.models.take_rate_series import run_take_rate_series, scorecard_claim as take_rate_series_claim
 from valuo.provenance import FetchError, ProvenanceLedger, sha256_bytes, utc_now_iso
 from valuo.schemas import (
     EvidenceClaim,
@@ -172,14 +176,16 @@ class _Log:
 # ============================================================================ stage 2: concurrent API collectors
 async def _collect_apis(
     ledger: ProvenanceLedger, args: argparse.Namespace, log: _Log,
-) -> tuple[ExecutionBenchmark | None, Any, PeerComps, dict[str, Any] | None]:
-    """Run bench (optional), forensics, comps and the Chain Signatures audit on one event loop and one client.
+) -> tuple[ExecutionBenchmark | None, Any, PeerComps, dict[str, Any] | None, dict[str, Any]]:
+    """Run bench (optional), forensics, comps, the Chain Signatures audit and EXTRA_COLLECTORS on one event loop and one client.
 
     Bench failure -> None. The Chain Signatures audit also reads NearBlocks, so it waits for forensics to finish
     (the two would share NearBlocks' unauthenticated per-minute quota) and then runs while bench/comps continue.
     """
     timeout = max(config.HTTP_TIMEOUT_S, 25.0)
     forensics_done = asyncio.Event()
+    bench_done = asyncio.Event()
+    events = {"bench_done": bench_done, "forensics_done": forensics_done}
     async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
         async def forensics_task() -> Any:
             try:
@@ -206,23 +212,41 @@ async def _collect_apis(
             return cs
 
         async def bench_task() -> ExecutionBenchmark | None:
-            if args.skip_bench:
-                ledger.warn("reproduce: execution benchmark skipped (--skip-bench); execution_bench is null")
-                return None
             try:
-                return await collect_execution_bench(ledger, clips_usd=args.clip_values, client=client, budget_s=args.bench_budget)
-            except Exception as exc:  # the race is evidence, not a prerequisite; record and carry on
-                ledger.warn(f"reproduce: execution benchmark failed ({type(exc).__name__}: {exc}); execution_bench is null")
-                log(f"execution_bench failed: {type(exc).__name__}: {exc}")
-                return None
+                if args.skip_bench:
+                    ledger.warn("reproduce: execution benchmark skipped (--skip-bench); execution_bench is null")
+                    return None
+                try:
+                    return await collect_execution_bench(ledger, clips_usd=args.clip_values, client=client, budget_s=args.bench_budget)
+                except Exception as exc:  # the race is evidence, not a prerequisite; record and carry on
+                    ledger.warn(f"reproduce: execution benchmark failed ({type(exc).__name__}: {exc}); execution_bench is null")
+                    log(f"execution_bench failed: {type(exc).__name__}: {exc}")
+                    return None
+            finally:
+                bench_done.set()
 
-        bench, forensics, comps, chain_sigs = await asyncio.gather(
+        async def extra_task(key: str, fn: Any) -> Any:
+            t0 = time.perf_counter()
+            try:
+                out = await fn(client, ledger, args, log, events)
+            except Exception as exc:  # noqa: BLE001 - evidence, not a prerequisite
+                ledger.warn(f"reproduce: {key} failed ({type(exc).__name__}: {exc}); snapshot.{key} is null")
+                log(f"{key} failed: {type(exc).__name__}: {exc}")
+                return None
+            if isinstance(out, dict):
+                out.setdefault("elapsed_s", round(time.perf_counter() - t0, 3))
+            log(f"{key} done in {time.perf_counter() - t0:.1f}s")
+            return out
+
+        bench, forensics, comps, chain_sigs, *extra_results = await asyncio.gather(
             bench_task(),
             forensics_task(),
             collect_comps_async(ledger, client=client),
             chain_signatures_task(),
+            *(extra_task(key, fn) for key, fn in EXTRA_COLLECTORS),
             return_exceptions=True,
         )
+    extras = {key: (None if isinstance(res, BaseException) else res) for (key, _fn), res in zip(EXTRA_COLLECTORS, extra_results)}
     if isinstance(bench, BaseException):  # cannot happen (bench_task swallows), kept for safety
         ledger.warn(f"reproduce: execution benchmark failed ({bench!r}); execution_bench is null")
         bench = None
@@ -231,7 +255,7 @@ async def _collect_apis(
     if isinstance(chain_sigs, BaseException):
         ledger.warn(f"reproduce: chain_signatures failed ({chain_sigs!r}); chain_signatures is null")
         chain_sigs = None
-    return bench, forensics, comps, chain_sigs
+    return bench, forensics, comps, chain_sigs, extras
 
 
 # ============================================================================ stage 3: comps backfill
@@ -807,6 +831,50 @@ DERIVED_MODELS: tuple[tuple[str, Any], ...] = (
     ("bull_case", run_bull_case),  # reads market_implied, so it runs after it
 )
 
+# Derived views that also read the run's persisted raw payloads: (snapshot key, fn(snap_dict, raw_dir) -> dict).
+# They run after the backtest, in list order. A failure nulls the key and adds a warning. One entry per view.
+RAW_DERIVED_MODELS: list[tuple[str, Any]] = [
+    ("take_rate_series", run_take_rate_series),
+]
+
+# Extra evidence collectors run inside _collect_apis on the shared client:
+# (snapshot key, async fn(client, ledger, args, log, events) -> dict | None), events = {"bench_done", "forensics_done"}
+# (asyncio.Event). A collector that calls the quote venues waits for bench_done so it never competes with the race.
+# Never fatal: an exception becomes a ledger warning and a null key. One entry per collector.
+EXTRA_COLLECTORS: list[tuple[str, Any]] = [
+    ("fee_pool_share", collect_fee_pool),
+    ("liquidity_ladder", collect_liquidity_ladder),
+    ("wide_peers", collect_wide_peers),
+]
+
+# Graded scorecard rows from the views above: (snapshot key, fn(data) -> claim dict | None). Appended after the backtest
+# row, in list order. A view that is null, declines to grade (None) or raises adds no row; a raise adds a warning.
+EXTRA_CLAIMS: list[tuple[str, Any]] = [
+    ("backtest", bootstrap_claim),
+    ("take_rate_series", take_rate_series_claim),
+    ("liquidity_ladder", liquidity_ladder_claim),
+    ("fee_pool_share", fee_pool_claim),
+    ("wide_peers", wide_peers_claim),
+]
+_CLAIM_FIELDS = ("claim", "status", "value", "source", "confidence", "note")
+
+
+def extra_claims(snap_dict: Mapping[str, Any]) -> tuple[list[EvidenceClaim], list[str]]:
+    """(claims, warnings) from EXTRA_CLAIMS for the keys present and non-null in ``snap_dict``."""
+    claims: list[EvidenceClaim] = []
+    warns: list[str] = []
+    for key, fn in EXTRA_CLAIMS:
+        data = snap_dict.get(key)
+        if not data:
+            continue
+        try:
+            row = fn(data)
+            if row:
+                claims.append(_claim(**{f: str(row.get(f) or "") for f in _CLAIM_FIELDS}))
+        except Exception as exc:  # noqa: BLE001 - a scorecard row, not a prerequisite
+            warns.append(f"reproduce: scorecard row for {key} failed ({type(exc).__name__}: {exc}); row omitted")
+    return claims, warns
+
 
 def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None = None, log: Any = None, raw_dir: Path | None = None) -> list[str]:
     """Run market_implied / sensitivity / relative_value on the snapshot's JSON dict and attach them as top-level keys.
@@ -844,6 +912,25 @@ def attach_derived_models(snapshot: Snapshot, timings: dict[str, float] | None =
     if timings is not None:
         timings["backtest"] = round(time.perf_counter() - t0, 3)
     # ---- backtest (end)
+    for key, fn in RAW_DERIVED_MODELS:
+        t0 = time.perf_counter()
+        try:
+            setattr(snapshot, key, fn(snap_dict, raw_dir))
+            snap_dict[key] = sanitize_json(getattr(snapshot, key))
+        except Exception as exc:  # noqa: BLE001 - a derived view, not a prerequisite
+            setattr(snapshot, key, None)
+            out.append(f"reproduce: {key} failed ({type(exc).__name__}: {exc}); snapshot.{key} is null")
+            if log is not None:
+                log(f"{key} failed: {type(exc).__name__}: {exc}")
+        if timings is not None:
+            timings[key] = round(time.perf_counter() - t0, 3)
+    snap_dict["backtest"] = sanitize_json(getattr(snapshot, "backtest", None))
+    for key, _fn in EXTRA_COLLECTORS:  # collector outputs are already on the snapshot; make sure the dict has them
+        snap_dict.setdefault(key, sanitize_json(getattr(snapshot, key, None)))
+    claims, claim_warns = extra_claims(snap_dict)
+    if claims:
+        snapshot.evidence_scorecard = [*snapshot.evidence_scorecard, *claims]
+    out.extend(claim_warns)
     if out:
         snapshot.warnings = _merge_warnings(snapshot.warnings, out)
     return out
@@ -898,7 +985,7 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
 
     log(f"api collectors: execution_bench({'skip' if args.skip_bench else 'live'}) || intents_forensics({args.nearblocks_pages} pages) || comps")
     t0 = time.perf_counter()
-    bench, forensics, comps, chain_sigs = asyncio.run(_collect_apis(ledger, args, log))
+    bench, forensics, comps, chain_sigs, extras = asyncio.run(_collect_apis(ledger, args, log))
     timings["api_collectors"] = round(time.perf_counter() - t0, 3)
     if isinstance(forensics, BaseException):
         raise forensics
@@ -954,6 +1041,7 @@ def run_pipeline(args: argparse.Namespace, log: _Log | None = None) -> tuple[Sna
         evidence_scorecard=scorecard, assumptions=assumptions.as_list(registry), warnings=warnings, provenance_summary=ledger.summary(),
         volume_growth=volume_growth,  # extra field: the measured growth fit (and whether the model used it)
         chain_signatures=chain_sigs,  # extra field (OpenModel extra="allow"); null when the audit failed
+        **extras,  # EXTRA_COLLECTORS outputs, one top-level key each (null when the collector failed)
         run_config={
             "argv": list(getattr(args, "argv_used", [])), "skip_bench": args.skip_bench, "paths": args.paths, "seed": args.seed,
             "no_archival": args.no_archival, "clips_usd": args.clip_values, "nearblocks_pages": args.nearblocks_pages,

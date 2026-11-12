@@ -15,11 +15,11 @@ Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not
 | Section | What it is | Try it without a wallet |
 | --- | --- | --- |
 | **01 Thesis & evidence** | The **bull-case scorecard**: 8 conditions the long-term case needs (Intents volume growth, holder revenue, the L1 multiple, 1Click's pricing edge, confidential flow, net deflation, the 2.5% → 1.6% issuance cut, solver competition). Each shows the value it requires, the live value, a 90-day trend from a real series and a status. Below it: the reverse valuation and the evidence scorecard. | [`/terminal#thesis`](https://usevaluo.vercel.app/terminal#thesis) |
-| **02 Execution alpha** | **Live quote race.** The same dry quote request goes to 1Click, Relay, LI.FI and Across at once, ranked on destination units delivered for the identical input, on cross-VM (`ETH USDC → SOL USDC`), native BTC and EVM L2 routes, at $500, $50,000 and $250,000. Nothing is signed or sent. | [`/terminal#execution`](https://usevaluo.vercel.app/terminal#execution) → **Run live quote race** |
+| **02 Execution alpha** | **Live quote race.** The same dry quote request goes to 1Click, Relay, LI.FI and Across at once, ranked on destination units delivered for the identical input, on cross-VM (`ETH USDC → SOL USDC`), native BTC and EVM L2 routes, at $500, $50,000 and $250,000. Nothing is signed or sent. Below it, three tests of whether the fee survives: a **size ladder** (the largest clip each venue will quote, $1K to $5M), NEAR Intents' **share of the cross-chain fee pool** against five other routers, and the **take-rate history** (rolling 30-day fees over volume, with a trend test). | [`/terminal#execution`](https://usevaluo.vercel.app/terminal#execution) → **Run live quote race** |
 | **03 Supply physics** | Issuance measured per epoch from `total_supply` jumps, against buybacks, L1 gas burn and NEP storage-staking locks (1 NEAR per 100 KB). Breakeven daily volume per issuance regime, and a **Chain Signatures** audit of `v1.signer` usage. | [`/terminal#supply`](https://usevaluo.vercel.app/terminal#supply) → toggle the regime |
-| **04 SOTP & Monte Carlo** | Three-engine sum-of-the-parts (SOTP) valuation, 10,000 seeded paths (seed `20261114`), sliders that re-price client-side with the same formulas, a sensitivity tornado and peer multiples. **Publish your forecast** to NEAR from here (needs a wallet). | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp) → move the sliders |
+| **04 SOTP & Monte Carlo** | Three-engine sum-of-the-parts (SOTP) valuation, 10,000 seeded paths (seed `20261114`), sliders that re-price client-side with the same formulas, a sensitivity tornado, peer multiples and a **wider peer set** (every chain with a liquid token and fee revenue, not three hand-picked ones). **Publish your forecast** to NEAR from here (needs a wallet). | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp) → move the sliders |
 | **05 Bear case** | Four stress scenarios priced through the same model, each with a live early-warning trigger and threshold. A trigger that was not measured says so; it is never read as "not breached". | [`/terminal#bear`](https://usevaluo.vercel.app/terminal#bear) |
-| **06 History** | Daily snapshots and hourly quote races as time series, plus an **out-of-sample backtest** of the volume model, including where it fails. | [`/terminal#history`](https://usevaluo.vercel.app/terminal#history) |
+| **06 History** | Daily snapshots and hourly quote races as time series, plus an **out-of-sample backtest** of the volume model, including where it fails, scored for two engines side by side (the model's GBM and a block bootstrap of realized daily moves). | [`/terminal#history`](https://usevaluo.vercel.app/terminal#history) |
 | **07 Ask the analyst** | Questions answered only from the hashed snapshot by a model on NEAR AI Cloud's attested private inference. Every sentence cites its source; numbers are checked against the context; the response signature is verified against NEAR AI's attestation report. *If it is not in the snapshot, the analyst says so.* | [`/terminal#analyst`](https://usevaluo.vercel.app/terminal#analyst) |
 
 ### More to explore
@@ -27,10 +27,10 @@ Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not
 | Feature | What it is | Where |
 | --- | --- | --- |
 | **Verify sources** | Re-hashes every stored raw payload with WebCrypto in your browser, and "Fetch live and compare" re-issues a recorded request to show what changed since the snapshot. | header → **Verify sources**, or [`/terminal?verify=rehash`](https://usevaluo.vercel.app/terminal?verify=rehash) |
-| **IC memo** | A 15-section Markdown memo generated from the snapshot. It opens with the falsifiable long-term case. | [`/api/snapshot?format=memo`](https://usevaluo.vercel.app/api/snapshot?format=memo) |
+| **IC memo** | A 16-section Markdown memo generated from the snapshot. It opens with the falsifiable long-term case. | [`/api/snapshot?format=memo`](https://usevaluo.vercel.app/api/snapshot?format=memo) |
 | **Snapshot JSON** | The exact bytes of the dataset the terminal renders (SHA-256 equals `manifest.json`: `snapshot_sha256`). The manifest comes with the default [`/api/snapshot`](https://usevaluo.vercel.app/api/snapshot) response. | [`/api/snapshot?format=json`](https://usevaluo.vercel.app/api/snapshot?format=json) |
 | **Forecast board** | Every forecast published to NEAR SocialDB under `*/valuo/forecast/*`, read key-free and scored against later snapshots. The board keeps the newest 5 records per account and drops any record whose horizon is not after its creation date or whose stated creation time disagrees with the block that stored it (a backdated forecast). | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp), below **Publish your forecast** (click **Refresh** if it looks empty; the list is cached up to 30 s). Raw: [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts) |
-| **Landing page** | The thesis in one page: what the price requires, the measured strengths and weaknesses, and the falsification triggers. | [`/`](https://usevaluo.vercel.app/) |
+| **Landing page** | The thesis in one page: what the price requires, the measured strengths and weaknesses, and the falsification triggers. Under the hero, a **live supply ticker** reads `total_supply` from mainnet and shows NEAR minted since the snapshot against NEAR removed. | [`/`](https://usevaluo.vercel.app/) |
 
 The terminal has a sticky left sidebar with count badges (bull-case conditions on track, bear triggers breached, history points) that collapses to its section numbers. On phones and tablets it becomes a left drawer opened by a burger button, every table scrolls inside its card, and inputs use 16 px text so iOS does not zoom. The header shows the snapshot's NEAR block, its time and how far it trails the live chain head.
 
@@ -280,31 +280,31 @@ On 2026-11-10 the scheduler's account anchored the 13:04 UTC snapshot (manifest 
 ---
 
 <!-- VALUO:FINDINGS:START -->
-## Findings as of the committed snapshot (NEAR block 224,174,242, 2026-11-12T06:05:01.555Z UTC)
+## Findings as of the committed snapshot (NEAR block 224,186,938, 2026-11-12T08:05:20.527Z UTC)
 
-Generated by `python -m valuo.reproduce` from `artifacts/latest_snapshot.json` (SHA-256 `f201d830075e3451cb4aaadcd502ee1c393c84b7e01b5a33e0646b25e173c11e`, 2026-11-12T06:05:03.441Z UTC, valuo 0.1.0). Every figure is a live fetch, an arithmetic derivation or a labeled assumption; `n/a` means the source was unavailable in this run and nothing was substituted. `make reproduce` regenerates this block.
+Generated by `python -m valuo.reproduce` from `artifacts/latest_snapshot.json` (SHA-256 `14c76062482ec8fd0f9e4294d1e7d5a8902c7c81f84266a6cc098d7536e3a562`, 2026-11-12T08:05:22.348Z UTC, valuo 0.1.0). Every figure is a live fetch, an arithmetic derivation or a labeled assumption; `n/a` means the source was unavailable in this run and nothing was substituted. `make reproduce` regenerates this block.
 
 | Finding | Value | Basis |
 | :--- | :--- | :--- |
-| NEAR block / total supply | 224,174,242 / 1,311,473,244 NEAR | RPC `block` header at 2026-11-12T06:05:01.555Z |
-| Market FDV vs model (expected path / MC P50) | $4.63B vs $2.11B / $689.1M (market = 2.2x the expected path) | model capitalises Intents holder revenue + gas burn + state lock, 36 m, 25% discount, 60x terminal cap |
-| What the market FDV requires (one input at a time) | expected volume growth 127.4% (evidence 21.8%; outside); starting public take 56.99 bps (evidence 3.00 bps; outside); terminal multiple 135x (evidence 2,512x; inside) | brentq solve on the expected path, others at base; evidence = trailing-12m Intents volume growth, live competitive fee ceiling, peer median FDV/revenue (`market_implied`) |
-| Relative value: FDV / annualised fees | NEAR 64x vs peer median 257x; rank 2 of 4 (lowest first, inside the peer range) | peer-multiple band $11.50B-$46.25B is a cross-check, not a fair value; n = 3 peers (`relative_value`) |
-| Top FDV drivers (tornado) | public_volume_growth_yoy $710.2M-$6.45B; terminal_multiple $369.2M-$5.13B; fee_compression_lambda_monthly $847.9M-$3.53B (86% of swing-squared variance) | 17 inputs at registry / measured ranges; 2 reach the market FDV (`sensitivity`) |
-| Protocol inflation cap / measured issuance | 2.50% cap; measured 32,701,161 NEAR/yr = 2.493% (89,531 NEAR/day) | `EXPERIMENTAL_protocol_config`; total_supply jumps at epoch starts |
-| Validators / staked ratio | 340 / 44.38% (581,994,836 NEAR) | RPC `validators` |
-| intents.near NEP state lock | 13,603,518,865 bytes = 136,035 NEAR locked; growth 304.9 NEAR/day over 29.9 d | `view_account` + storage_amount_per_byte (0.01 NEAR/KB); archival lookback for growth |
-| NEAR Intents 30d volume (public / confidential) | $3.73B (n/a / n/a; confidential share 11.5%) | total: nearstats / DefiLlama; confidential share ESTIMATED ON-CHAIN (`onchain_estimate`): on-chain estimate: Confidential Intents Treasury 24h inflow / (24h volume + inflow) = 11.5% (band 11.5%-14.8%); nearstats split implausible |
-| Gross take / net take / capture ratio | 15.50 bps / 4.83 bps / 31.2% | ONE canonical window: aligned daily charts, 30 complete UTC days 2026-10-13..2026-11-11 |
-| Daily sinks vs issuance | buyback 17,025 NEAR + gas burn 966 NEAR + state lock 337 NEAR = 20.5% of 89,531 NEAR/day | supply_physics; buyback = V x tau x alpha / P |
-| Breakeven daily volume V* (status quo / SVRN glidepath) | $644.5M / $409.1M per day (today $124.4M/day) | V* = (I - G - L) x P / (tau x alpha) at the regime's terminal rate |
-| Live quote race, 1Click headroom vs best competitor (destination units) | ETH USDC -> SOL USDC: +2.25 bps median over 3 cells; ETH USDC -> native BTC: -0.09 bps median over 3 cells; Base USDC -> Arbitrum USDC: -1.02 bps median over 3 cells | 1Click vs Relay / LI.FI / Across at $500, $50,000, $250,000; competitor ceiling 3.00 bps on cross-VM; 2026-11-12T06:05:10.633Z |
-| Deposit/caller HHI / solver HHI on intents.near | 2,450 (bootstrap 90% CI 1,500-3,550) / 4,324 (bootstrap 90% CI 3,757-4,816) (87 fill participations over 17,341 s); cartel trigger breached | NearBlocks receipts: 137 over 8 pages; AI-agent (name-pattern) share 45.0% |
-| SOTP FDV P10 / P50 / P90 (36 m, discounted) | $134.7M / $689.1M / $4.17B vs current FDV $4.63B (-85.1% at P50) | 10,000 paths, seed 20261114; terminal multiple 60.0x (derived); deterministic (expected-path) FDV $2.11B |
-| Bear case, combined worst (deterministic, median inputs) | $214.5M (-90%); triggers breached 2 of 4 measured | four falsification scenarios through deterministic_sotp; live early-warning metrics |
-| Evidence scorecard | DERIVED 4, NOT_SUPPORTED 2, VERIFIED_LIVE_API 3, VERIFIED_ON_CHAIN 3 | 12 graded claims in `IC_MEMO.md` section 12 |
+| NEAR block / total supply | 224,186,938 / 1,311,498,639 NEAR | RPC `block` header at 2026-11-12T08:05:20.527Z |
+| Market FDV vs model (expected path / MC P50) | $4.60B vs $2.03B / $668.5M (market = 2.3x the expected path) | model capitalises Intents holder revenue + gas burn + state lock, 36 m, 25% discount, 60x terminal cap |
+| What the market FDV requires (one input at a time) | expected volume growth 130.3% (evidence 21.8%; outside); starting public take 59.64 bps (evidence 3.00 bps; outside); terminal multiple 140x (evidence 2,514x; inside) | brentq solve on the expected path, others at base; evidence = trailing-12m Intents volume growth, live competitive fee ceiling, peer median FDV/revenue (`market_implied`) |
+| Relative value: FDV / annualised fees | NEAR 64x vs peer median 257x; rank 2 of 4 (lowest first, inside the peer range) | peer-multiple band $11.50B-$46.33B is a cross-check, not a fair value; n = 3 peers (`relative_value`) |
+| Top FDV drivers (tornado) | public_volume_growth_yoy $685.0M-$6.21B; terminal_multiple $357.0M-$4.93B; fee_compression_lambda_monthly $774.4M-$3.45B (86% of swing-squared variance) | 17 inputs at registry / measured ranges; 2 reach the market FDV (`sensitivity`) |
+| Protocol inflation cap / measured issuance | 2.50% cap; measured 32,766,005 NEAR/yr = 2.498% (89,708 NEAR/day) | `EXPERIMENTAL_protocol_config`; total_supply jumps at epoch starts |
+| Validators / staked ratio | 354 / 44.43% (582,691,226 NEAR) | RPC `validators` |
+| intents.near NEP state lock | 13,605,979,376 bytes = 136,060 NEAR locked; growth 302.5 NEAR/day over 31.2 d | `view_account` + storage_amount_per_byte (0.01 NEAR/KB); archival lookback for growth |
+| NEAR Intents 30d volume (public / confidential) | $3.73B (n/a / n/a; confidential share 13.1%) | total: nearstats / DefiLlama; confidential share ESTIMATED ON-CHAIN (`onchain_estimate`): on-chain estimate: Confidential Intents Treasury 24h inflow / (24h volume + inflow) = 13.1% (band 11.6%-14.8%); nearstats split implausible |
+| Gross take / net take / capture ratio | 15.86 bps / 4.84 bps / 30.5% | ONE canonical window: aligned daily charts, 30 complete UTC days 2026-10-12..2026-11-10 |
+| Daily sinks vs issuance | buyback 17,261 NEAR + gas burn 727 NEAR + state lock 336 NEAR = 20.4% of 89,708 NEAR/day | supply_physics; buyback = V x tau x alpha / P |
+| Breakeven daily volume V* (status quo / SVRN glidepath) | $643.3M / $408.9M per day (today $125.3M/day) | V* = (I - G - L) x P / (tau x alpha) at the regime's terminal rate |
+| Live quote race, 1Click headroom vs best competitor (destination units) | ETH USDC -> SOL USDC: +2.14 bps median over 3 cells; ETH USDC -> native BTC: -5.14 bps median over 3 cells; Base USDC -> Arbitrum USDC: -0.94 bps median over 3 cells | 1Click vs Relay / LI.FI / Across at $500, $50,000, $250,000; competitor ceiling 3.00 bps on cross-VM; 2026-11-12T08:05:30.847Z |
+| Deposit/caller HHI / solver HHI on intents.near | 2,687 (bootstrap 90% CI 1,690-3,961) / 5,349 (bootstrap 90% CI 4,831-5,913) (85 fill participations over 34,896 s); cartel trigger breached | NearBlocks receipts: 173 over 8 pages; AI-agent (name-pattern) share 47.4% |
+| SOTP FDV P10 / P50 / P90 (36 m, discounted) | $131.0M / $668.5M / $4.04B vs current FDV $4.60B (-85.5% at P50) | 10,000 paths, seed 20261114; terminal multiple 60.0x (derived); deterministic (expected-path) FDV $2.03B |
+| Bear case, combined worst (deterministic, median inputs) | $176.0M (-91%); triggers breached 2 of 4 measured | four falsification scenarios through deterministic_sotp; live early-warning metrics |
+| Evidence scorecard | DERIVED 4, NOT_SUPPORTED 6, VERIFIED_LIVE_API 4, VERIFIED_ON_CHAIN 3 | 17 graded claims in `IC_MEMO.md` section 13 |
 
-13 methodology warning(s) recorded in this run; see `IC_MEMO.md` section 15.1.
+15 methodology warning(s) recorded in this run; see `IC_MEMO.md` section 16.1.
 <!-- VALUO:FINDINGS:END -->
 
 ---
@@ -318,7 +318,7 @@ Generated by `python -m valuo.reproduce` from `artifacts/latest_snapshot.json` (
 - **User-written data is untrusted.** Forecasts read from SocialDB are length-capped, numbers are coerced, malformed entries are dropped and counted, and nothing is rendered as HTML. Text inside analyst context items is passed to the model as data, not instructions.
 - **The scheduler cannot hurt its host.** On a shared server the jobs run as an unprivileged `valuo` user inside a systemd scope (`MemoryMax=768M`, low CPU and IO weight); a runaway run is killed instead of competing with other services (`ops/vps/install-shared.sh`).
 - **The in-browser reproduce button is off by default** (`VALUO_ALLOW_REPRODUCE`), so a public deployment cannot be made to spawn the pipeline.
-- **Tests:** 365 passed, 5 skipped (the skipped ones are live-network tests, run with `VALUO_LIVE_TESTS=1`), `make test`, 2026-11-12.
+- **Tests:** 448 passed, 5 skipped (the skipped ones are live-network tests, run with `VALUO_LIVE_TESTS=1`), `make test`, 2026-11-12.
 
 ## What is measured, derived, assumed or simulated
 
@@ -376,7 +376,7 @@ Everything works without a `.env`. Copy `.env.example` to `.env` at the repo roo
 **Test status (2026-11-12):**
 
 ```
-365 passed, 5 skipped
+448 passed, 5 skipped
 ```
 
 ## Deploying

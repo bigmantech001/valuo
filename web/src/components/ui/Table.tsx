@@ -45,7 +45,12 @@ export function Table<T>({ columns, rows, rowKey, caption, dense = true, emptyTe
   return (
     <div className={cn("w-full overflow-auto valuo-scroll", className)} style={maxHeight ? { maxHeight } : undefined}>
       <table className="w-full border-collapse text-[13.5px]">
-        {caption ? <caption className="pb-2 text-left text-[13px] text-muted">{caption}</caption> : null}
+        {caption ? (
+          <caption className="pb-2 text-left text-[13px] text-muted">
+            {/* Pinned to the visible width so a wide, scrolling table does not clip its caption on a phone. */}
+            <span className="sticky left-0 block w-[min(100%,calc(100vw-5rem))]">{caption}</span>
+          </caption>
+        ) : null}
         <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
           <tr className="bg-surface">
             {columns.map((c) => (

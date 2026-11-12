@@ -53,9 +53,34 @@ export function CalibrationPanel({ snapshot, manifest }: { snapshot: Snapshot; m
   const H = sotp.horizon_months;
   const yoy = yoyFromMonthly(cal.growth_monthly_pub);
 
+  // Engine note: the valuation's volume paths are the GBM; snapshot.backtest carries a block-bootstrap variant scored out of sample.
+  const veff = snapshot.backtest?.engines?.block_bootstrap ? snapshot.backtest.valuation_effect : null;
+  const vol12 = veff?.volume_12m;
+  const fdvAlt = veff?.fdv?.computed ? veff.fdv : null;
+  const x2 = (v: number | null | undefined) => `${fmtNum(v, { decimals: 2 })}x`;
+  const bootBand = vol12?.block_bootstrap_registry_drift;
+  const engineRow: Row | null = veff
+    ? {
+        key: "ve",
+        group: "Volatility",
+        name: "Volume engine",
+        value: "GBM (unchanged)",
+        basis: "assumption",
+        note: [
+          "Lognormal paths from the sigma above. A block bootstrap of daily changes is reported next to it and is not used",
+          vol12 && bootBand ? `: at the same expected path its P10 to P90 for 30-day volume in ${fmtInt(vol12.horizon_months)} months is ${x2(bootBand.p10)} to ${x2(bootBand.p90)} today's, against ${x2(vol12.gbm.p10)} to ${x2(vol12.gbm.p90)} for the GBM` : "",
+          fdvAlt?.block_bootstrap && fdvAlt.gbm ? `; swapped into the Monte Carlo it gives FDV P50 ${fmtUsdCompact(fdvAlt.block_bootstrap.p50)} against ${fmtUsdCompact(fdvAlt.gbm.p50)}` : "",
+          snapshot.backtest?.engines?.gbm?.calibrated?.all === false && snapshot.backtest.engines.block_bootstrap.calibrated?.all === false ? ". Neither engine passes the out-of-sample coverage test" : "",
+          ".",
+        ].join(""),
+        srcText: "Backtest, History tab",
+      }
+    : null;
+
   const rows: Row[] = [
     { key: "sp", group: "Volatility", name: "Price volatility, annual", value: num3(cal.sigma_price_annual), basis: "measured", note: `${fmtInt(cal.volatility_n_obs)} daily closes over ${vol?.window ?? cal.volatility_window}; ${num3(cal.sigma_price_monthly)} a month`, prov: REF.priceHistory1y },
     { key: "sv", group: "Volatility", name: "Volume volatility, monthly", value: num3(cal.sigma_volume_monthly), basis: "measured", note: `${fmtInt(vol?.volume_monthly_n_obs ?? cal.sigma_volume_monthly_n_obs)} monthly returns; confidential leg × ${fmtNum(cal.confidential_sigma_multiplier, { decimals: 2 })}`, prov: REF.intentsDexVolume },
+    ...(engineRow ? [engineRow] : []),
     { key: "vol", group: "Volume and fees", name: "Volume, 30 days, public / confidential", value: `${fmtUsdCompact(cal.v_pub_30d_usd)} / ${fmtUsdCompact(cal.v_conf_30d_usd)}`, basis: "measured", note: `Confidential share ${pct1(cal.confidential_share_start)}`, prov: REF.nearstatsSummary },
     { key: "tp", group: "Volume and fees", name: "Public take rate at start", value: bps2(cal.tau_pub_start_bps), basis: "derived", note: `Blended gross ${bps2(cal.blended_gross_take_bps)} = fees ${fmtUsdCompact(cal.gross_fees_30d_usd)} / volume`, prov: REF.intentsFees },
     { key: "tc", group: "Volume and fees", name: "Confidential take rate at start", value: bps2(cal.tau_conf_start_bps), basis: "assumption", note: "No live confidential fee series" },

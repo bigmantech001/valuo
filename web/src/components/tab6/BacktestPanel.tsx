@@ -4,7 +4,7 @@ import { Stat } from "@/components/ui/Stat";
 import { Table, type Column } from "@/components/ui/Table";
 import { fmtInt, fmtNum, fmtPct, fmtUsdCompact } from "@/lib/format";
 import { SERIES_COLORS } from "@/lib/theme";
-import type { BacktestHorizonStats, BacktestRow, VolumeBacktest } from "@/lib/types";
+import type { BacktestHorizonStats, BacktestRow, VolumeBacktest, VolumeEngineScore } from "@/lib/types";
 import { TimeChart, type TimePoint } from "./TimeChart";
 
 /**
@@ -37,6 +37,143 @@ function statRows(label: string, block: Record<string, BacktestHorizonStats> | u
   return Object.entries(block)
     .filter(([, s]) => s && s.n > 0)
     .map(([h, s]) => ({ key: `${prefix}-${h}`, sample: label, h, s }));
+}
+
+type Triple = { p10: number; p50: number; p90: number };
+type EngineRow = { key: string; h: number; g: BacktestHorizonStats | undefined; b: BacktestHorizonStats | undefined; gOk: boolean | null | undefined; bOk: boolean | null | undefined; width: number | null | undefined };
+type EffectRow = { key: string; measure: string; engine: string; t: Triple; fmt: (v: number) => string };
+
+const pval = (v: number | null | undefined) => (typeof v === "number" && v < 0.005 ? "<0.01" : fmtNum(v, { decimals: 2 }));
+const insideText = (s: BacktestHorizonStats | undefined) => (s && s.n > 0 ? `${fmtInt(s.inside ?? 0)} of ${fmtInt(s.n)} (${pct0(s.coverage_p10_p90)})` : "n/a");
+
+function verdictCell(s: BacktestHorizonStats | undefined, ok: boolean | null | undefined, target: number) {
+  if (!s || s.n === 0 || ok === null || ok === undefined) return <span className="text-dim">untested</span>;
+  if (ok) return <span className="text-emerald">not rejected</span>;
+  return <span className="text-crimson">rejected, band too {(s.coverage_p10_p90 ?? 0) > target ? "wide" : "narrow"}</span>;
+}
+
+function rejectedCount(e: VolumeEngineScore, hs: number[]): number {
+  return hs.filter((h) => e.calibrated?.per_horizon?.[String(h)] === false).length;
+}
+
+function coverageLine(e: VolumeEngineScore | undefined, hs: number[]): string | null {
+  if (!e) return null;
+  const parts = hs.filter((h) => (e.by_horizon?.[String(h)]?.n ?? 0) > 0).map((h) => `${monthsLabel(h)} ${insideText(e.by_horizon[String(h)])}, p ${pval(e.by_horizon[String(h)]?.binom_p_vs_80)}`);
+  return parts.length ? parts.join("; ") : null;
+}
+
+/**
+ * Second volume engine (stationary block bootstrap) scored on the same origins as the GBM, plus what swapping it into the
+ * valuation would do. Rendered only when snapshot.backtest.engines is present; the valuation itself stays on the GBM.
+ */
+function EngineComparison({ bt, horizons }: { bt: VolumeBacktest; horizons: number[] }) {
+  const eng = bt.engines;
+  if (!eng?.gbm?.by_horizon || !eng.block_bootstrap?.by_horizon) return null;
+  const { gbm, block_bootstrap: boot } = eng;
+  const cmp = bt.comparison;
+  const target = eng.target_coverage ?? bt.target_coverage ?? 0.8;
+  const hs = horizons.filter((h) => (boot.by_horizon[String(h)]?.n ?? 0) > 0);
+  if (hs.length === 0) return null;
+
+  const rows: EngineRow[] = hs.map((h) => ({
+    key: String(h),
+    h,
+    g: gbm.by_horizon[String(h)],
+    b: boot.by_horizon[String(h)],
+    gOk: gbm.calibrated?.per_horizon?.[String(h)],
+    bOk: boot.calibrated?.per_horizon?.[String(h)],
+    width: cmp?.per_horizon?.[String(h)]?.band_width_ratio_bootstrap_to_gbm,
+  }));
+  const columns: Column<EngineRow>[] = [
+    { key: "h", header: "Horizon", className: "whitespace-nowrap", render: (r) => monthsLabel(r.h) },
+    { key: "g-in", header: "GBM: inside band", numeric: true, className: "whitespace-nowrap", render: (r) => insideText(r.g) },
+    { key: "g-p", header: `GBM: p vs ${pct0(target)}`, numeric: true, render: (r) => pval(r.g?.binom_p_vs_80) },
+    { key: "g-v", header: "GBM: verdict", render: (r) => verdictCell(r.g, r.gOk, target) },
+    { key: "b-in", header: "Bootstrap: inside band", numeric: true, className: "whitespace-nowrap", render: (r) => insideText(r.b) },
+    { key: "b-p", header: `Bootstrap: p vs ${pct0(target)}`, numeric: true, render: (r) => pval(r.b?.binom_p_vs_80) },
+    { key: "b-v", header: "Bootstrap: verdict", render: (r) => verdictCell(r.b, r.bOk, target) },
+    { key: "b-bias", header: "Bootstrap: realized / median", numeric: true, render: (r) => ratio(r.b?.median_ratio_realized_to_p50) },
+    { key: "w", header: "Band width, bootstrap / GBM", numeric: true, title: "Ratio of the median ln(P90 / P10) of the two engines", render: (r) => (typeof r.width === "number" ? `${fmtNum(r.width, { decimals: 1 })}x` : "n/a") },
+  ];
+
+  const nb = rejectedCount(boot, hs);
+  const ng = rejectedCount(gbm, hs);
+  const title =
+    nb === 0
+      ? `The block bootstrap's coverage is not rejected at any of ${fmtInt(hs.length)} horizons; the GBM's is rejected at ${fmtInt(ng)}`
+      : `Coverage against ${pct0(target)}: block bootstrap rejected at ${fmtInt(nb)} of ${fmtInt(hs.length)} horizons, GBM at ${fmtInt(ng)} of ${fmtInt(hs.length)}`;
+  const registry = coverageLine(boot.variants?.registry_drift, hs);
+  const thumb = coverageLine(boot.variants?.rule_of_thumb_blocks, hs);
+  const power = cmp?.power_1m;
+
+  const ve = bt.valuation_effect;
+  const vol = ve?.volume_12m;
+  const fdv = ve?.fdv?.computed ? ve.fdv : null;
+  const multiple = (v: number) => `${fmtNum(v, { decimals: 2 })}x`;
+  const usd = (v: number) => fmtUsdCompact(v);
+  const volMeasure = vol ? `30-day volume in ${fmtInt(vol.horizon_months)} months, multiple of today's` : "";
+  const fdvMeasure = fdv ? `Model FDV${fdv.horizon_months ? `, ${fmtInt(fdv.horizon_months)}-month run` : ""}` : "";
+  const effectRows: EffectRow[] = [
+    ...(vol?.gbm ? [{ key: "v-g", measure: volMeasure, engine: "GBM (used by the valuation)", t: vol.gbm, fmt: multiple }] : []),
+    ...(vol?.block_bootstrap_registry_drift ? [{ key: "v-br", measure: volMeasure, engine: "Block bootstrap, same expected path", t: vol.block_bootstrap_registry_drift, fmt: multiple }] : []),
+    ...(vol?.block_bootstrap_resampled_drift ? [{ key: "v-bs", measure: volMeasure, engine: "Block bootstrap, resampled drift", t: vol.block_bootstrap_resampled_drift, fmt: multiple }] : []),
+    ...(fdv?.gbm ? [{ key: "f-g", measure: fdvMeasure, engine: "GBM (used by the valuation)", t: fdv.gbm, fmt: usd }] : []),
+    ...(fdv?.block_bootstrap ? [{ key: "f-b", measure: fdvMeasure, engine: "Block bootstrap, same expected path", t: fdv.block_bootstrap, fmt: usd }] : []),
+  ];
+  const effectColumns: Column<EffectRow>[] = [
+    { key: "measure", header: "Measure", render: (r) => r.measure },
+    { key: "engine", header: "Volume engine", render: (r) => r.engine },
+    { key: "p10", header: "P10", numeric: true, render: (r) => r.fmt(r.t.p10) },
+    { key: "p50", header: "P50", numeric: true, render: (r) => r.fmt(r.t.p50) },
+    { key: "p90", header: "P90", numeric: true, render: (r) => r.fmt(r.t.p90) },
+  ];
+
+  return (
+    <Card
+      kicker="Second engine, same out-of-sample test"
+      title={title}
+      subtitle={`Stationary block bootstrap of realized daily log-changes (${fmtInt(boot.n_paths)} paths, seed ${boot.seed}), scored on the same origins and realized values as the GBM. It is reported next to the base case; the valuation does not use it.`}
+    >
+      <div className="space-y-4">
+        {cmp?.headline ? <p className="max-w-4xl text-[13.5px] leading-relaxed text-ink">{cmp.headline}</p> : null}
+        <Table columns={columns} rows={rows} rowKey={(r) => r.key} caption={`P10 to P90 coverage per horizon against the ${pct0(target)} target, exact two-sided binomial test. Both engines are scored on the same forecasts.`} stickyHeader={false} />
+        {registry || thumb || power ? (
+          <div className="max-w-4xl space-y-1.5 text-[13px] leading-relaxed text-muted">
+            {registry ? <p>Bootstrap shape at the GBM&apos;s expected path: {registry}.</p> : null}
+            {thumb ? <p>Sensitivity, cube-root block length: {thumb}.</p> : null}
+            {power ? (
+              <p>
+                Power: with {fmtInt(power.n)} one-month forecasts the test accepts {fmtInt(power.accept_min)} to {fmtInt(power.accept_max)} inside. An engine whose true coverage is 60% is rejected {pct0(power.reject_prob_if_true_60)} of the time and one at 70%{" "}
+                {pct0(power.reject_prob_if_true_70)} of the time, so a pass on this sample is weak evidence.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {effectRows.length ? (
+          <Table
+            columns={effectColumns}
+            rows={effectRows}
+            rowKey={(r) => r.key}
+            caption={`What the engine choice does to the valuation inputs${vol ? `, from the ${vol.origin_date} origin` : ""}. Headline figures use the GBM rows.`}
+            stickyHeader={false}
+          />
+        ) : null}
+        {ve?.headline ? <p className="max-w-4xl text-[13.5px] leading-relaxed text-ink">{ve.headline}</p> : null}
+        {ve?.fdv && !ve.fdv.computed ? <p className="text-[13px] text-muted">FDV under the bootstrap was not computed{ve.fdv.reason ? `: ${ve.fdv.reason}` : ""}.</p> : null}
+      </div>
+      <MethodNote className="mt-5" summary="Block bootstrap: rule, limits and what was not tuned">
+        <p>{boot.method}</p>
+        <p>
+          Block length rule <code>{boot.block_length_rule}</code>, fixed before any coverage was computed
+          {boot.mean_block_days ? `; mean block ${fmtNum(boot.mean_block_days.min, { decimals: 1 })} to ${fmtNum(boot.mean_block_days.max, { decimals: 1 })} days across origins (median ${fmtNum(boot.mean_block_days.median, { decimals: 1 })})` : ""}. Lookback{" "}
+          {fmtInt(boot.lookback_days)} days, the same window the GBM sigma uses. Grading: {boot.calibrated?.rule}
+        </p>
+        {(boot.caveats ?? []).map((c) => (
+          <p key={c}>{c}</p>
+        ))}
+      </MethodNote>
+    </Card>
+  );
 }
 
 export function BacktestPanel({ backtest }: { backtest: VolumeBacktest | null | undefined }) {
@@ -161,6 +298,8 @@ export function BacktestPanel({ backtest }: { backtest: VolumeBacktest | null | 
       </div>
 
       <Table columns={columns} rows={tableRows} rowKey={(r) => r.key} caption="Coverage, bias and PIT counts per horizon. A calibrated model puts about 80% inside the band and a flat PIT histogram." stickyHeader={false} />
+
+      <EngineComparison bt={bt} horizons={horizons} />
 
       <MethodNote summary="Backtest method: what was and was not tested">
         <p>

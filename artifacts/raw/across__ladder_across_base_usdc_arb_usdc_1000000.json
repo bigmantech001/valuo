@@ -1,0 +1,1 @@
+{"type":"AcrossApiError","code":"AMOUNT_TOO_HIGH","status":400,"message":"Amount is higher than available liquidity. Max amount is 433017.692629 USDC.","id":"kn7bf-1794470737017-7ccd12667f83"}

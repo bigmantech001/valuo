@@ -1,5 +1,6 @@
 export { LandingNav } from "./LandingNav";
 export { Hero } from "./Hero";
+export { SupplyTicker } from "./SupplyTicker";
 export { Findings } from "./Findings";
 export { Questions } from "./Questions";
 export { Method } from "./Method";
