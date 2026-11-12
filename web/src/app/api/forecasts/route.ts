@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverEnv } from "@/lib/env";
-import { FORECAST_PATH, SOCIAL_CONTRACT, isAccountId, parseForecastTree, scoreForecast, type ForecastEntry, type ForecastScore, type Realized } from "@/lib/forecast";
+import { FORECAST_PATH, SOCIAL_CONTRACT, isAccountId, parseForecastTree, scoreForecast, writeTimeConsistent, type BlockAnchor, type ForecastEntry, type ForecastScore, type Realized } from "@/lib/forecast";
 import { rpcEndpoint } from "@/lib/nearRpc";
 import { clientIp, createLimiter, tooManyRequests } from "@/lib/rateLimit";
 import { loadArtifacts } from "@/lib/snapshot";
@@ -184,6 +184,15 @@ function realizedFrom(snapshot: Awaited<ReturnType<typeof loadArtifacts>>["snaps
   return { price_usd: price, as_of: asOf, source: `latest_snapshot.json intents_forensics.price.current_usd (${p?.source ?? "nearstats"})`, snapshot_sha256: sha };
 }
 
+/** Rows returned at most; the newest by block height win. */
+const MAX_ROWS = 200;
+
+function blockAnchor(snapshot: Awaited<ReturnType<typeof loadArtifacts>>["snapshot"]): BlockAnchor | null {
+  const h = snapshot?.near_rpc?.block_height;
+  const t = snapshot?.generated_at_utc ? Date.parse(snapshot.generated_at_utc) : NaN;
+  return typeof h === "number" && h > 0 && Number.isFinite(t) ? { block_height: h, time_ms: t } : null;
+}
+
 export async function GET(req: NextRequest): Promise<Response> {
   const decision = limit(clientIp(req));
   if (!decision.ok) return tooManyRequests(decision, "forecast board");
@@ -229,7 +238,12 @@ export async function GET(req: NextRequest): Promise<Response> {
       extraError = e instanceof Error ? e.message : String(e);
     }
   }
-  entries = entries.sort((x, y) => (y.block_height ?? 0) - (x.block_height ?? 0) || y.key.localeCompare(x.key));
+  // Drop records whose declared creation time disagrees with the block that stored them (backdated forecasts).
+  const anchor = blockAnchor(artifacts.snapshot);
+  const before = entries.length;
+  entries = entries.filter((e) => writeTimeConsistent(e, anchor));
+  const backdated = before - entries.length;
+  entries = entries.sort((x, y) => (y.block_height ?? 0) - (x.block_height ?? 0) || y.key.localeCompare(x.key)).slice(0, MAX_ROWS);
 
   const realized = realizedFrom(artifacts.snapshot, artifacts.manifest?.snapshot_sha256 ?? null);
   const forecasts: (ForecastEntry & { score: ForecastScore })[] = entries.map((e) => ({ ...e, score: scoreForecast(e.value, realized) }));
@@ -242,7 +256,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       count: forecasts.length,
       resolved_count: resolved.length,
       mean_abs_error_pct_resolved: mape,
-      rejected_entries: b.rejected,
+      rejected_entries: b.rejected + backdated,
+      backdated_entries: backdated,
       realized,
       sources: { indexer: b.indexer, rpc: b.rpc, contract: SOCIAL_CONTRACT, pattern: PATTERN, extra_account: extra, extra_account_error: extraError },
       fetched_at: b.fetched_at,

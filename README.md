@@ -28,8 +28,8 @@ Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not
 | --- | --- | --- |
 | **Verify sources** | Re-hashes every stored raw payload with WebCrypto in your browser, and "Fetch live and compare" re-issues a recorded request to show what changed since the snapshot. | header → **Verify sources**, or [`/terminal?verify=rehash`](https://usevaluo.vercel.app/terminal?verify=rehash) |
 | **IC memo** | A 15-section Markdown memo generated from the snapshot. It opens with the falsifiable long-term case. | [`/api/snapshot?format=memo`](https://usevaluo.vercel.app/api/snapshot?format=memo) |
-| **Snapshot JSON** | The full dataset the terminal renders, with the manifest. | [`/api/snapshot?format=json`](https://usevaluo.vercel.app/api/snapshot?format=json) |
-| **Forecast board** | Every forecast published to NEAR SocialDB under `*/valuo/forecast/*`, read key-free and scored against later snapshots. | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp), below **Publish your forecast** (click **Refresh** if it looks empty; the list is cached up to 30 s). Raw: [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts) |
+| **Snapshot JSON** | The exact bytes of the dataset the terminal renders (SHA-256 equals `manifest.json`: `snapshot_sha256`). The manifest comes with the default [`/api/snapshot`](https://usevaluo.vercel.app/api/snapshot) response. | [`/api/snapshot?format=json`](https://usevaluo.vercel.app/api/snapshot?format=json) |
+| **Forecast board** | Every forecast published to NEAR SocialDB under `*/valuo/forecast/*`, read key-free and scored against later snapshots. The board keeps the newest 5 records per account and drops any record whose horizon is not after its creation date or whose stated creation time disagrees with the block that stored it (a backdated forecast). | [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp), below **Publish your forecast** (click **Refresh** if it looks empty; the list is cached up to 30 s). Raw: [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts) |
 | **Landing page** | The thesis in one page: what the price requires, the measured strengths and weaknesses, and the falsification triggers. | [`/`](https://usevaluo.vercel.app/) |
 
 The terminal has a sticky left sidebar with count badges (bull-case conditions on track, bear triggers breached, history points) that collapses to its section numbers. On phones and tablets it becomes a left drawer opened by a burger button, every table scrolls inside its card, and inputs use 16 px text so iOS does not zoom. The header shows the snapshot's NEAR block, its time and how far it trails the live chain head.
@@ -200,7 +200,7 @@ sequenceDiagram
 
 An anchoring failure is logged and never fails the run; that snapshot is simply not anchored. The hourly job (`valuo-run.sh bench`) runs the quote race, re-hashes its stored payloads and commits `artifacts/history/`.
 
-**Falsification is written on-chain, not announced.** The thesis is falsified if any bear trigger holds for 30 consecutive days. `valuo.history` counts each streak over the daily records: two records more than 36 h apart break it, and so does a day the trigger was not measured, so a missed run never counts as a breached day. After each anchor, `valuo.anchor falsification` reads `artifacts/history/summary.json` and, for any trigger whose streak has reached 30 days and has no record yet, writes `<account>/valuo/falsification/<trigger>` (trigger, threshold, streak start, last value, snapshot SHA-256) with the same key and transaction path as the snapshot anchor. As of 2026-11-11 no trigger qualifies: governance stalemate and solver cartelization each read 0.7 of 30 days, restarted on 2026-11-10 after a 40 h gap in the daily records. `make falsification-check ANCHOR=<account>` prints the per-trigger status and the args it would send (no key); `make falsification-list ANCHOR=<account>` reads the records back and recomputes each streak from `snapshots.jsonl`.
+**Falsification is written on-chain, not announced.** The thesis is falsified if any bear trigger holds for 30 consecutive days. `valuo.history` counts each streak over the daily records: two records more than 36 h apart break it, and so does a day the trigger was not measured, so a missed run never counts as a breached day. After each anchor, `valuo.anchor falsification` reads `artifacts/history/summary.json` and, for any trigger whose streak has reached 30 days and has no record yet, writes `<account>/valuo/falsification/<trigger>` (trigger, threshold, streak start, last value, snapshot SHA-256) with the same key and transaction path as the snapshot anchor. As of 2026-11-12 no trigger qualifies: governance stalemate and solver cartelization each read 1.7 of 30 days, restarted on 2026-11-10 after a 40 h gap in the daily records. Current streaks are on the History tab and in `artifacts/history/summary.json` (`snapshots.bear_triggers`). `make falsification-check ANCHOR=<account>` prints the per-trigger status and the args it would send (no key); `make falsification-list ANCHOR=<account>` reads the records back and recomputes each streak from `snapshots.jsonl`.
 
 ### Publishing a forecast
 
@@ -275,7 +275,7 @@ On 2026-11-10 the scheduler's account anchored the 13:04 UTC snapshot (manifest 
 
 **A visitor forecast, end to end.** On 2026-11-11 the account [`bigmantech001.near`](https://nearblocks.io/address/bigmantech001.near) published a forecast from its own wallet through **Publish your forecast**: transaction [`3ZqwUprY…`](https://nearblocks.io/txns/3ZqwUprYywZuJ6puotb7mK9zHBTKmKnM3aQaTWwmpU2y), SocialDB key `bigmantech001.near/valuo/forecast/20261111T045413Z`, written at block 224,018,870 (5.5 Tgas, 0.03 NEAR storage deposit). It shows on the board at [`/terminal#sotp`](https://usevaluo.vercel.app/terminal#sotp) (scroll below **Publish your forecast**) as "On-chain", and in [`/api/forecasts`](https://usevaluo.vercel.app/api/forecasts).
 
-**The quote-race record.** Over the first 24 recorded races (2026-11-08 20:34 to 2026-11-11 08:23 UTC, 2.5 days), 1Click delivered the most output in 86 of 216 contested route-clip races: 40%, 90% Wilson interval 34% to 45%. The aggregate hides a split. It won all 72 on ETH USDC to SOL USDC (median margin +0.98 bps), 13 of 72 on ETH USDC to native BTC (Relay won 58 of the 59 losses, median shortfall 16.6 bps) and 1 of 72 on Base USDC to Arbitrum USDC (Across 53, Relay 18; median shortfall 1.02 bps). A race counts only when 1Click and at least one competitor quoted; |headroom| below 0.01 bps is a tie and is left out of the rate. Hourly races are autocorrelated, so the interval is narrower than the true uncertainty. The table is `bench.routes` in `artifacts/history/summary.json` and the first card of the History tab.
+**The quote-race record.** Over the first 46 recorded races (2026-11-08 20:34 to 2026-11-12 06:23 UTC, 3.4 days), 1Click delivered the most output in 171 of 413 decided route-clip races: 41%, 90% Wilson interval 37% to 45%. The aggregate hides a split. It won all 138 on ETH USDC to SOL USDC (median margin +0.98 bps), 26 of 138 on ETH USDC to native BTC (Relay won 109 of the 112 losses, median shortfall 14.5 bps) and 7 of 137 on Base USDC to Arbitrum USDC (Across 112, Relay 18; median shortfall 1.02 bps). The job adds a race every hour, so these counts are a dated reading; the current ones are in the table named below. A race counts only when 1Click and at least one competitor quoted; |headroom| below 0.01 bps is a tie and is left out of the rate. Hourly races are autocorrelated, so the interval is narrower than the true uncertainty. The table is `bench.routes` in `artifacts/history/summary.json` and the first card of the History tab.
 
 ---
 
@@ -318,7 +318,7 @@ Generated by `python -m valuo.reproduce` from `artifacts/latest_snapshot.json` (
 - **User-written data is untrusted.** Forecasts read from SocialDB are length-capped, numbers are coerced, malformed entries are dropped and counted, and nothing is rendered as HTML. Text inside analyst context items is passed to the model as data, not instructions.
 - **The scheduler cannot hurt its host.** On a shared server the jobs run as an unprivileged `valuo` user inside a systemd scope (`MemoryMax=768M`, low CPU and IO weight); a runaway run is killed instead of competing with other services (`ops/vps/install-shared.sh`).
 - **The in-browser reproduce button is off by default** (`VALUO_ALLOW_REPRODUCE`), so a public deployment cannot be made to spawn the pipeline.
-- **Tests:** 345 passed, 5 skipped (the skipped ones are live-network tests, run with `VALUO_LIVE_TESTS=1`), `make test`, 2026-11-10.
+- **Tests:** 365 passed, 5 skipped (the skipped ones are live-network tests, run with `VALUO_LIVE_TESTS=1`), `make test`, 2026-11-12.
 
 ## What is measured, derived, assumed or simulated
 
@@ -343,7 +343,7 @@ Python 3.11+ with `uv`, `httpx`, `pydantic` v2, `numpy`, `scipy`, `duckdb`, `pyt
 
 ```bash
 make sync          # cd quant && uv sync
-make reproduce     # live mainnet + quote race + forensics -> 10,000-path Monte Carlo -> artifacts/ (about 8 minutes)
+make reproduce     # live mainnet + quote race + forensics -> 10,000-path Monte Carlo -> artifacts/ (about 8 minutes; the scheduled daily run allows a longer Chain Signatures sample and takes about 13)
 make test          # unit tests + invariant checks against artifacts/
 shasum -a 256 artifacts/latest_snapshot.json   # must equal manifest.json: snapshot_sha256
 cd web && npm install && npm run dev            # http://localhost:3000, reads ../artifacts
@@ -373,10 +373,10 @@ Everything works without a `.env`. Copy `.env.example` to `.env` at the repo roo
 | `VALUO_ALLOW_REPRODUCE` | enables the in-browser reproduce button | `0` (off) |
 | `VALUO_ANCHOR_ACCOUNT` | scheduler only: NEAR account that anchors snapshots | unset: no anchoring |
 
-**Test status (2026-11-10):**
+**Test status (2026-11-12):**
 
 ```
-345 passed, 5 skipped
+365 passed, 5 skipped
 ```
 
 ## Deploying

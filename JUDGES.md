@@ -6,7 +6,7 @@ Track: `[ 02 / INV ] Investment Thesis`, judged on evidence, not conviction.
 
 ---
 
-## 1. Reproduce everything (about 2 minutes, no API keys)
+## 1. Reproduce everything (about 8 minutes, no API keys)
 
 ```bash
 make sync          # Python env via uv (quant/.venv)
@@ -40,7 +40,7 @@ Every graded claim is in `evidence_scorecard` with its grade, value, source reco
 | NEP storage staking locks NEAR on `intents.near` (1 NEAR per 100 KB) | `near_rpc.tracked_sinks[]`, `near_rpc.storage_near_per_kb` | `view_account` on `intents.near` (`storage_usage` × `storage_amount_per_byte` from `EXPERIMENTAL_protocol_config`). |
 | 1Click out-delivers the best competitor on cross-VM routes, and trails on native BTC and EVM L2 | `execution_bench.results[]`, `headroom_by_archetype_bps` | Terminal, tab 02, "Run live quote race": the same dry quotes, fired from your browser session, compared on destination units. Or `make bench`. |
 | Take rate, capture ratio and volume on one aligned 30-day window | `intents_forensics.fees`, `intents_forensics.volume` | `curl -s https://api.llama.fi/summary/fees/near-intents?dataType=dailyFees` (and `dailyRevenue`, `dailyHoldersRevenue`); the window dates are in `fees.take_rate_window`. |
-| Confidential share of volume | `intents_forensics.volume.confidential_share_status` | If the status is `implausible_fallback`, the nearstats split was rejected (cumulative confidential volume reported as zero while confidential TVL is non-zero) and the model uses the labelled 40% registry assumption; the claim is graded ASSUMPTION, not VERIFIED. Check `curl -s https://nearstats.org/api/near/summary` → `intents.totalsBreakdown`. |
+| Confidential share of volume | `intents_forensics.volume.confidential_share_status` | `measured`: the nearstats split passed its plausibility check. `onchain_estimate`: the split was rejected (cumulative confidential volume reported as zero while confidential TVL is non-zero) and the share is estimated from Confidential Intents Treasury flows over the last 24 hours (`confidential_share_estimate`: inflow, outflow, band, known biases); the claim is graded DERIVED, not VERIFIED. `implausible_fallback`: the split was rejected and the treasury audit was unavailable, so the model uses the labelled registry assumption (`confidential_share` in `assumptions[]`); graded ASSUMPTION. Check `curl -s https://nearstats.org/api/near/summary` → `intents.totalsBreakdown`. |
 | Solver concentration (the cartelization trigger) | `intents_forensics.solver_concentration` (`hhi_solver`, `hhi_solver_ci90`, `sample_span_s`) | The trigger is graded only when the sample spans at least `solver_sample_min_span_s` (in `assumptions[]`); otherwise it reads "inconclusive". Raw pages: `nearblocks` records in the manifest. |
 | What NEAR's market value requires | `market_implied.solves[]` | Each solve reports `check_rel_error`: plugging the required value back into the model reproduces the market FDV. `cd quant && uv run python -m valuo.models.market_implied ../artifacts/latest_snapshot.json` recomputes it. |
 | Which assumptions move the valuation | `sensitivity.rows[]` | `uv run python -m valuo.models.sensitivity ../artifacts/latest_snapshot.json`; ranges come from the registry (`assumptions[]`, each with low, high and justification) or from measured dispersion. |
@@ -60,7 +60,7 @@ We list these ourselves; none of them is hidden in the UI or the memo.
 
 - The model values only NEAR Intents cash flow plus two assumption-heavy engines; the market prices NEAR as a layer 1. `market_implied` quantifies the gap instead of explaining it away.
 - The terminal multiple is capped at 60× (`assumptions[]`, `terminal_multiple_cap`); the raw peer median is far higher and shown next to it.
-- The confidential share is an assumption whenever nearstats' split fails its plausibility check (status in the snapshot). Engine 2 depends on it.
+- The confidential share is not a clean measurement whenever nearstats' split fails its plausibility check (status in the snapshot): it is then a 24-hour on-chain estimate with a stated band, or the registry assumption if the treasury audit is unavailable. Engine 2 depends on it.
 - Native BTC: 1Click does not out-deliver Relay on the corridors we sample; the claim is graded NOT_SUPPORTED.
 - Peer set for relative value is three chains.
 - NearBlocks' free tier limits the solver sample; its span and confidence interval are reported, and the trigger reads "inconclusive" below the minimum span.

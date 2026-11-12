@@ -5,7 +5,7 @@ import { Panel, SubHead } from "@/components/tab1/parts";
 import { MethodNote } from "@/components/ui/Section";
 import { fmtInt, fmtPct, fmtUsdCompact, NA } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import type { Sensitivity, SensitivityRow } from "@/lib/types";
+import type { Assumption, Sensitivity, SensitivityRow } from "@/lib/types";
 
 /** Two neutral greys: the bar half reached with the input at its low end, and at its high end. */
 const LOW_FILL = "#C9C3B5";
@@ -26,12 +26,16 @@ function Tornado({ rows, base, market }: { rows: SensitivityRow[]; base: number;
   const ticks = niceTicks([0, hi], 6);
   const domainHi = Math.max(hi, ticks[ticks.length - 1] ?? hi);
   const pct = (v: number) => `${(Math.max(0, Math.min(domainHi, v)) / domainHi) * 100}%`;
-  const grid = "grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)_9.5rem] items-center gap-x-5";
+  // Phones stack the label above the bar (two columns: bar track, range), so the track keeps a usable width and
+  // the input name is not cut off. The first cell of every row spans both columns there (`labelCell`).
+  const grid =
+    "grid grid-cols-[minmax(0,1fr)_6.5rem] items-center gap-x-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_9.5rem] sm:gap-x-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)_9.5rem]";
+  const labelCell = "min-w-0 max-sm:col-span-2";
   const marketNearEnd = fin(market) && market / domainHi > 0.85;
   return (
     <div role="img" aria-label="Deterministic FDV with each input at its low and high end, all others at base, sorted by swing">
       {/* reference-line labels */}
-      <div className={grid}>
+      <div className={cn(grid, "max-sm:hidden")}>
         <div />
         <div className="relative h-6 text-[12px] text-ink">
           <span className="tnum absolute bottom-1 -translate-x-1/2 whitespace-nowrap" style={{ left: pct(base) }}>
@@ -59,9 +63,9 @@ function Tornado({ rows, base, market }: { rows: SensitivityRow[]; base: number;
               className={cn(grid, "border-t border-border py-1.5 first:border-t-0")}
               title={`${r.label}: ${fmtUnit(r.low, r.unit)} gives ${fmtUsdCompact(r.fdv_low)}, ${fmtUnit(r.high, r.unit)} gives ${fmtUsdCompact(r.fdv_high)} (base ${fmtUnit(r.base, r.unit)}); ${r.range_basis}`}
             >
-              <div className="min-w-0">
-                <div className="truncate text-[13px] text-ink">{r.label}</div>
-                <div className="truncate text-[12px] text-dim">
+              <div className={cn(labelCell, "max-sm:pb-1")}>
+                <div className="text-[13px] text-ink sm:truncate">{r.label}</div>
+                <div className="text-[12px] text-dim sm:truncate">
                   {fmtUnit(r.low, r.unit)} to {fmtUnit(r.high, r.unit)}, base {fmtUnit(r.base, r.unit)} · {r.source}
                 </div>
               </div>
@@ -76,7 +80,7 @@ function Tornado({ rows, base, market }: { rows: SensitivityRow[]; base: number;
                 {fin(market) ? <span aria-hidden className="absolute -inset-y-1.5 border-l border-dashed border-ink" style={{ left: pct(market) }} /> : null}
               </div>
               <div className="text-right">
-                <div className="tnum text-[13px] text-ink">
+                <div className="tnum text-[12px] text-ink sm:text-[13px]">
                   {fmtUsdCompact(lo)} to {fmtUsdCompact(hiV)}
                 </div>
                 <div className="tnum text-[12px] text-dim">{fin(r.variance_share) ? `${fmtPct(r.variance_share, { decimals: 1 })} of variance` : NA}</div>
@@ -87,10 +91,10 @@ function Tornado({ rows, base, market }: { rows: SensitivityRow[]; base: number;
       </div>
       {/* axis */}
       <div className={cn(grid, "border-t border-border-strong pt-1.5")}>
-        <div className="text-[12px] text-dim">Input range, source</div>
+        <div className={cn(labelCell, "text-[12px] text-dim max-sm:hidden")}>Input range, source</div>
         <div className="relative h-5 text-[12px] text-dim">
-          {ticks.map((t) => (
-            <span key={t} className="tnum absolute -translate-x-1/2 whitespace-nowrap" style={{ left: pct(t) }}>
+          {ticks.map((t, i) => (
+            <span key={t} className={cn("tnum absolute -translate-x-1/2 whitespace-nowrap", i !== 0 && i !== ticks.length - 1 && "max-sm:hidden")} style={{ left: pct(t) }}>
               {fmtUsdCompact(t, { decimals: t >= 1e9 ? 1 : 0 })}
             </span>
           ))}
@@ -106,9 +110,14 @@ function Tornado({ rows, base, market }: { rows: SensitivityRow[]; base: number;
  * the low and high end of its registry (or measured) range, all others at base, sorted by swing.
  * Bars are neutral greys; the market FDV is a dashed reference line. Reads `sensitivity`.
  */
-export function WhatYouHaveToBelieve({ sensitivity }: { sensitivity: Sensitivity | null | undefined }) {
+export function WhatYouHaveToBelieve({ sensitivity, assumptions }: { sensitivity: Sensitivity | null | undefined; assumptions?: Assumption[] | null }) {
   if (!sensitivity) return null;
-  const rows = [...(sensitivity.rows ?? [])].filter((r) => fin(r.fdv_low) && fin(r.fdv_high)).sort((a, b) => b.swing_usd - a.swing_usd);
+  // A registry input the run replaced by a measurement (volume growth) is labelled by the registry's source, not as an assumption.
+  const measuredKeys = new Set((assumptions ?? []).filter((a) => a.source === "measured").map((a) => a.key));
+  const rows = [...(sensitivity.rows ?? [])]
+    .filter((r) => fin(r.fdv_low) && fin(r.fdv_high))
+    .map((r) => (r.source === "assumption" && measuredKeys.has(r.param) ? { ...r, source: "measured", range_basis: r.range_basis.replace(/^registry range/, "measured 90% interval") } : r))
+    .sort((a, b) => b.swing_usd - a.swing_usd);
   const base = sensitivity.base_fdv_usd;
   const market = fin(sensitivity.current_fdv_usd) ? sensitivity.current_fdv_usd : null;
   if (!rows.length || !fin(base)) {

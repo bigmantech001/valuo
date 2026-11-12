@@ -312,7 +312,8 @@ export function AnalystPanel() {
             value={question}
             onChange={(e) => setQuestion(e.target.value.slice(0, maxChars))}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              // Enter sends; Shift+Enter adds a line. An Enter that confirms an IME composition is left alone.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 void ask(question);
               }
@@ -326,6 +327,7 @@ export function AnalystPanel() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="tnum text-[12.5px] text-dim">
               {question.length}/{maxChars}
+              <span className="max-sm:hidden"> · Enter to send, Shift+Enter for a new line</span>
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {busy ? (

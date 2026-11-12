@@ -261,9 +261,16 @@ export function ProvenanceDrawer({ open, onClose, manifest, integrity }: Provena
         <div className="min-w-[15rem] max-w-[24rem]">
           <div className="text-[12.5px] text-muted">{sourceName(r.source)}</div>
           <div className="break-all font-mono text-[12px] text-ink">{r.name}</div>
-          <a href={r.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-[12px] text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent" title={`${r.method} ${r.url}`}>
-            {r.method} {r.url.replace(/^https?:\/\//, "")}
-          </a>
+          {r.method === "GET" ? (
+            <a href={r.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-[12px] text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent" title={`${r.method} ${r.url}`}>
+              {r.method} {r.url.replace(/^https?:\/\//, "")}
+            </a>
+          ) : (
+            // A POST endpoint opened in a browser tab returns 404/405; show it as text. "Fetch live and compare" replays the request.
+            <span className="mt-0.5 block truncate text-[12px] text-muted" title={`${r.method} ${r.url}`}>
+              {r.method} {r.url.replace(/^https?:\/\//, "")}
+            </span>
+          )}
           {r.error ? <div className="mt-0.5 text-[12px] leading-snug text-crimson">{r.error}</div> : null}
           <RowResults record={r} index={position.get(r)} hashes={hashes} live={live} latest={index.get(r.source, r.name)} />
         </div>

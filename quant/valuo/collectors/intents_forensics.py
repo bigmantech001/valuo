@@ -1055,6 +1055,9 @@ def _llama(payload: Any) -> _LlamaSummary | None:
         return None
 
 
+MAX_UNSETTLED_TAIL_DAYS = 3
+
+
 def _ts_date(ts: int) -> date:
     return datetime.fromtimestamp(ts, tz=timezone.utc).date()
 
@@ -1072,6 +1075,7 @@ def aligned_window_sums(
 
     The join is on unix day timestamps across fees, revenue and volume (holders revenue joins when present,
     else its sum is None). A trailing point dated ``as_of`` (today, UTC) is a partial day and is dropped.
+    Trailing days whose revenue exceeds fees are left out too and listed in ``excluded_unsettled_days``.
     Returns ``window_days = 0`` when the join is empty.
     """
     fees, rev, vol = dict(_chart_points(fees_chart)), dict(_chart_points(revenue_chart)), dict(_chart_points(volume_chart))
@@ -1081,9 +1085,15 @@ def aligned_window_sums(
         common &= set(hrev)
     today = as_of or datetime.now(timezone.utc).date()
     ordered = sorted(ts for ts in common if _ts_date(ts) < today)
+    # Revenue is a part of fees, so a day with revenue above fees has a fee figure that is not final yet (DefiLlama
+    # backfills the newest day's fees after its revenue). Up to MAX_UNSETTLED_TAIL_DAYS such trailing days are left out.
+    unsettled: list[int] = []
+    while ordered and len(unsettled) < MAX_UNSETTLED_TAIL_DAYS and rev[ordered[-1]] > fees[ordered[-1]] * (1.0 + 1e-9):
+        unsettled.append(ordered.pop())
     window = ordered[-days:]
     out: dict[str, Any] = {
         "window_days": len(window), "window_requested_days": days,
+        "excluded_unsettled_days": [_ts_date(t).isoformat() for t in reversed(unsettled)],
         "window_start_utc": _ts_date(window[0]).isoformat() if window else None,
         "window_end_utc": _ts_date(window[-1]).isoformat() if window else None,
         "fees": None, "revenue": None, "holders": None, "volume": None,
@@ -1136,6 +1146,11 @@ def fee_metrics(
         window_days = win["window_days"]
         vol_src = f"defillama:dexs/{DEFILLAMA_SLUG} daily chart summed over the aligned window"
         take_window = f"aligned daily charts, {window_days} complete UTC days {win['window_start_utc']}..{win['window_end_utc']}"
+        if win.get("excluded_unsettled_days"):
+            warnings.append(
+                f"take-rate window leaves out {', '.join(win['excluded_unsettled_days'])}: DefiLlama reports revenue above fees for that day, "
+                "so its fee figure is not final; the window ends the day before"
+            )
         if window_days < TAKE_RATE_WINDOW_DAYS:
             warnings.append(f"take-rate window has only {window_days} common complete days (requested {TAKE_RATE_WINDOW_DAYS})")
         if h30 is None:
@@ -1167,6 +1182,7 @@ def fee_metrics(
         "volume_30d_nearstats_usd": nearstats_volume_30d,
         "take_rate_window": take_window, "take_rate_window_days": window_days,
         "take_rate_window_start_utc": win["window_start_utc"], "take_rate_window_end_utc": win["window_end_utc"],
+        "take_rate_window_excluded_days": win.get("excluded_unsettled_days") or [],
         "defillama_total30d": llama_totals,
         "gross_take_bps": _bps(f30, vol30), "net_take_bps": _bps(r30, vol30), "holders_take_bps": _bps(h30, vol30),
         "gross_take_bps_on_public_volume": _bps(f30, nearstats_public_30d),
@@ -1413,9 +1429,12 @@ def onchain_share_estimate(boundary: Mapping[str, Any] | None, volume: Mapping[s
     a window the gross boundary flow on either side approximates confidential volume. With F = treasury flow over
     24 h and V = all-route 24 h volume:
 
-      point = F_in / (V + F_in)                         (V read as public-only volume)
-      low   = min(F_in, F_out) / (V + min(F_in, F_out)) (smaller side, V public-only)
-      high  = max(F_in, F_out) / V                      (larger side, V already including confidential flow)
+      point = F_in / V                                  (V read as all-route volume, confidential flow included)
+      low   = min(F_in, F_out) / (V + min(F_in, F_out)) (smaller side, V read as public-only)
+      high  = max(F_in, F_out) / V                      (larger side, V including confidential flow)
+
+    The point uses the same reading of V as the model, which applies the share to total volume
+    (confidential = total x share). The band spans both readings of V and both flow sides.
 
     Known biases, stated with the number: hourly snapshots net out same-hour shields and unshields (F is a lower
     bound on gross flow; pushes the estimate down); solver inventory crosses the boundary too (pushes it up); one
@@ -1426,7 +1445,7 @@ def onchain_share_estimate(boundary: Mapping[str, Any] | None, volume: Mapping[s
     if f_in is None or f_out is None or v is None or v <= 0 or f_in < 0 or f_out < 0 or b.get("status") not in (None, "measured"):
         return None
     lo_f, hi_f = min(f_in, f_out), max(f_in, f_out)
-    point = f_in / (v + f_in)
+    point = min(f_in / v, 0.99)
     low = lo_f / (v + lo_f)
     high = min(hi_f / v, 0.99)
     window = b.get("flow_window") if isinstance(b.get("flow_window"), Mapping) else {}
@@ -1435,7 +1454,7 @@ def onchain_share_estimate(boundary: Mapping[str, Any] | None, volume: Mapping[s
         "flow_in_24h_usd": f_in, "flow_out_24h_usd": f_out, "volume_24h_usd": v,
         "window_start_utc": window.get("start_time_utc"), "window_end_utc": window.get("end_time_utc"),
         "block_height": b.get("block_height"),
-        "method": "treasury inflow / (24h volume + inflow); band: smaller flow side over (V + flow) to larger side over V",
+        "method": "treasury inflow / 24h all-route volume; band: smaller flow side over (V + flow) to larger side over V",
         "biases": [
             "same-hour shields and unshields net out in hourly snapshots (estimate biased down)",
             "solver inventory crosses the boundary (biased up)",

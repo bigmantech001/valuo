@@ -37,6 +37,11 @@ def test_assumption_rows_use_registry_ranges() -> None:
         assert by[key]["source"] == "assumption"
     assert by["terminal_multiple"]["source"] == "derived"
     assert by["starting_volume"]["source"] == "measured"
+    # A registry entry the run replaced by a measurement is labelled measured, with its interval as the range.
+    snap = synthetic_snapshot()
+    snap["assumptions"] = [{"key": "public_volume_growth_yoy", "value": 0.5, "low": 0.1, "high": 1.2, "source": "measured"}]
+    g = {r["param"]: r for r in S.run_sensitivity(snap)["rows"]}["public_volume_growth_yoy"]
+    assert g["source"] == "measured" and (g["low"], g["high"]) == (0.1, 1.2) and g["range_basis"].startswith("measured 90% interval")
 
 
 def test_rows_match_direct_evaluation() -> None:

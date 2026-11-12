@@ -286,6 +286,17 @@ def test_aligned_window_drops_partial_current_day_and_unaligned_points():
     w3 = aligned_window_sums(fees, rev_today, None, vol_today, days=2, as_of=date.fromtimestamp(days[-1] + day))
     assert w3["window_days"] == 2 and w3["fees"] == 20.0 and w3["holders"] is None
     assert aligned_window_sums(None, rev, hrev, vol)["window_days"] == 0
+    assert w["excluded_unsettled_days"] == []
+    # A trailing day with revenue above fees has an unsettled fee figure: left out and named, the window ends the day before.
+    full_vol = [[t, 1000.0] for t in days]
+    late_fees = [[t, 10.0] for t in days[:-1]] + [[days[-1], 1.0]]
+    rev_all = [[t, 3.0] for t in days]
+    w4 = aligned_window_sums(late_fees, rev_all, hrev, full_vol, days=30, as_of=date.fromtimestamp(days[-1] + day))
+    assert w4["excluded_unsettled_days"] == [date.fromtimestamp(days[-1]).isoformat()]
+    assert w4["window_days"] == 5 and w4["fees"] == 50.0 and w4["window_end_utc"] == date.fromtimestamp(days[-2]).isoformat()
+    # An inconsistent day in the middle of the window is not a tail problem and stays in.
+    mid = [[t, 10.0] for t in days]; mid[2] = [days[2], 1.0]
+    assert aligned_window_sums(mid, rev_all, hrev, full_vol, days=30, as_of=date.fromtimestamp(days[-1] + day))["window_days"] == 6
 
 
 def test_fee_metrics_window_is_shared_by_take_rates(load_fixture):
@@ -938,7 +949,9 @@ def test_split_guard_uses_onchain_treasury_estimate_when_boundary_is_measured(lo
                 "flow_window": {"start_time_utc": "2026-11-10T06:05:00Z", "end_time_utc": "2026-11-11T06:05:08Z"}, "block_height": 1}
     out = confidential_split_guard(vol, summary, metrics, warnings, boundary=boundary)
     assert out["confidential_share_status"] == SPLIT_STATUS_ONCHAIN and out["confidential_share_measured"] is False
-    assert out["confidential_share_30d"] == pytest.approx(0.14 / 1.14)
+    assert out["confidential_share_30d"] == pytest.approx(0.14)  # inflow over all-route volume, the model's reading of V
+    lower_in = onchain_share_estimate({**boundary, "flow_24h_in_lower_bound_usd": 0.11 * v24, "flow_24h_out_lower_bound_usd": 0.14 * v24}, vol)
+    assert lower_in["value"] == pytest.approx(0.11) and lower_in["low"] < lower_in["value"] < lower_in["high"]  # strictly inside the band
     assert out["confidential_share_low"] == pytest.approx(0.11 / 1.11) and out["confidential_share_high"] == pytest.approx(0.14)
     assert out["confidential_share_low"] <= out["confidential_share_30d"] <= out["confidential_share_high"]
     assert out["confidential_share_30d"] != A.value("confidential_share") and out["confidential_share_source"].startswith("on-chain estimate")

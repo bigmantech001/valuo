@@ -318,6 +318,8 @@ export interface LandingData {
     confidentialTvlVerified: boolean;
     /** intents_forensics.volume.confidential_share_status: "implausible_fallback" = registry assumption, not a measurement */
     confidentialShareStatus: string | null;
+    confidentialShareLow: number | null;
+    confidentialShareHigh: number | null;
     confidentialShareMeasured: boolean | null;
     confidentialShareReported: number | null;
     allTimeConfidential: number | null;
@@ -595,6 +597,8 @@ export function buildLandingData(snapshot: Snapshot, manifest: Manifest | null):
       confidentialTvl: f.confidential_tvl_usd ?? null,
       confidentialTvlVerified: f.confidential_tvl_verified,
       confidentialShareStatus: strOf(vol, "confidential_share_status"),
+      confidentialShareLow: numOf(vol, "confidential_share_low"),
+      confidentialShareHigh: numOf(vol, "confidential_share_high"),
       confidentialShareMeasured: boolOf(vol, "confidential_share_measured"),
       confidentialShareReported: numOf(vol, "confidential_share_30d_reported"),
       allTimeConfidential: numOf(vol, "confidential_allTimeUsd"),
@@ -676,7 +680,7 @@ export function buildLandingData(snapshot: Snapshot, manifest: Manifest | null):
     sensitivity: sensitivityOf(snapAny.sensitivity),
     relativeValue: relativeValueOf(snapAny.relative_value),
     scorecard: snapshot.evidence_scorecard,
-    assumptionsCount: snapshot.assumptions.length,
+    assumptionsCount: snapshot.assumptions.filter((a) => a.source === "assumption").length,
     warnings: snapshot.warnings,
     provenance: {
       records: numOf(prov, "records") ?? (manifest ? manifest.records.length : null),
@@ -772,9 +776,21 @@ export function typo(s: string): string {
   return s.replace(/<=/g, "\u2264").replace(/>=/g, "\u2265").replace(/(^|[\s(])-(?=\d)/g, "$1\u2212");
 }
 
-/** True when the confidential share is a registry assumption this run, not a measurement. */
+/** True when the confidential share is estimated on-chain from Confidential Intents Treasury flows this run. */
+export function confidentialIsEstimated(v: LandingData["volume"]): boolean {
+  return v.confidentialShareStatus === "onchain_estimate" && v.confidentialShare30d !== null;
+}
+
+/** True when the confidential share is a registry assumption this run: not measured and not estimated on-chain. */
 export function confidentialIsAssumed(v: LandingData["volume"]): boolean {
+  if (confidentialIsEstimated(v)) return false;
   return v.confidentialShareMeasured === false || (v.confidentialShareStatus !== null && v.confidentialShareStatus !== "ok" && v.confidentialShareStatus !== "measured");
+}
+
+/** "band 11.5% to 14.8%" for the on-chain estimate, or "" when the band is missing. */
+export function confidentialBand(v: LandingData["volume"]): string {
+  const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+  return v.confidentialShareLow !== null && v.confidentialShareHigh !== null ? `band ${pct(v.confidentialShareLow)} to ${pct(v.confidentialShareHigh)}` : "";
 }
 
 /** Format a market-implied solve value in its own unit ("161%/yr", "178 bps", "372×", "$175M/yr"). */

@@ -99,7 +99,6 @@ export async function readMemo(): Promise<string | null> {
 
 /** Recompute sha256 over the snapshot file bytes and compare with the manifest's recorded digest. */
 export async function computeIntegrity(manifest: Manifest | null): Promise<Integrity> {
-  const paths = artifactPaths();
   const bytes = await readSnapshotBytes();
   const fileSha = bytes ? sha256Hex(bytes) : null;
   const manifestSha = manifest?.snapshot_sha256 ?? null;
@@ -107,8 +106,9 @@ export async function computeIntegrity(manifest: Manifest | null): Promise<Integ
     snapshot_sha256_file: fileSha,
     snapshot_sha256_manifest: manifestSha,
     matches: fileSha && manifestSha ? fileSha === manifestSha : null,
-    snapshot_path: paths.snapshot,
-    manifest_path: paths.manifest,
+    // File names only: the absolute server path is of no use to a reader and should not reach the browser.
+    snapshot_path: "artifacts/latest_snapshot.json",
+    manifest_path: "artifacts/manifest.json",
   };
 }
 

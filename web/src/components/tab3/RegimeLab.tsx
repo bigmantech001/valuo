@@ -22,6 +22,8 @@ function finite(v: number | null | undefined): v is number {
 type VolumeMode = "flat" | "yoy";
 
 export interface RegimeLabProps {
+  /** true when the registry's volume growth was replaced by the measured trend this run */
+  growthMeasured?: boolean;
   inputs: SupplyModelInputs | null;
   /** snapshot paths that were missing when `inputs` is null */
   missing: string[];
@@ -56,7 +58,7 @@ const times = (v: number) => `${fmtNum(v, { decimals: 1 })}×`;
  * Formulas are the TS port in `lib/supplyClient.ts`; the port check (in the method note) shows how
  * far it sits from the Python output stored in the snapshot (zero on the shipped snapshot).
  */
-export function RegimeLab({ inputs, missing, regimeLabels, portChecks, epochStartHeight, currentDailyVolumeUsd }: RegimeLabProps) {
+export function RegimeLab({ inputs, missing, regimeLabels, portChecks, epochStartHeight, currentDailyVolumeUsd, growthMeasured = false }: RegimeLabProps) {
   const [kind, setKind] = useState<RegimeKind>(REGIME_STATUS_QUO);
   const [capPct, setCapPct] = useState<number>(() => (inputs ? Math.round(inputs.current_max_inflation_rate * 100 * 100) / 100 : CAP_MAX_PCT));
   const [volumeMode, setVolumeMode] = useState<VolumeMode>("flat");
@@ -168,7 +170,7 @@ export function RegimeLab({ inputs, missing, regimeLabels, portChecks, epochStar
               onChange={setVolumeMode}
               options={[
                 { value: "flat", label: "Flat 30-day run-rate" },
-                { value: "yoy", label: `${fmtPct(inputs.public_volume_growth_yoy, { decimals: 0, signed: true })} a year (assumption)` },
+                { value: "yoy", label: `${fmtPct(inputs.public_volume_growth_yoy, { decimals: 0, signed: true })} a year (${growthMeasured ? "measured trend" : "assumption"})` },
               ]}
             />
           </div>

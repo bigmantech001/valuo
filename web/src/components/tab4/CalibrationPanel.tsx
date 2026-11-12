@@ -31,6 +31,7 @@ const BASIS_BADGE: Record<Basis, { variant: "verified-api" | "derived" | "assump
 export function CalibrationPanel({ snapshot, manifest }: { snapshot: Snapshot; manifest: Manifest | null }) {
   const sotp = snapshot.sotp;
   const cal = sotp?.calibration;
+  const growthMeasured = (snapshot.assumptions ?? []).some((a) => a.key === "public_volume_growth_yoy" && a.source === "measured");
   if (!cal) {
     return (
       <Card title="Calibration">
@@ -61,7 +62,7 @@ export function CalibrationPanel({ snapshot, manifest }: { snapshot: Snapshot; m
     { key: "al", group: "Volume and fees", name: "Buyback share of fees", value: pct1(cal.alpha_capture), basis: "measured", note: `Net take ${bps2(cal.net_take_start_bps)} at start`, prov: REF.intentsHoldersRevenue },
     { key: "fl", group: "Volume and fees", name: "Take-rate floor", value: bps2(cal.tau_floor_bps), basis: "derived", note: `Cross-VM headroom; competitive ceiling ${bps2(cal.competitive_fee_ceiling_bps ?? NaN)}`, prov: REF.oneclickCrossVm50k },
     { key: "lm", group: "Growth and decay", name: "Take-rate decay, public / confidential", value: `${pct2(cal.lambda_pub_monthly)} / ${pct2(cal.lambda_conf_monthly)} a month`, basis: "assumption" },
-    { key: "gp", group: "Growth and decay", name: "Public volume growth", value: fmtPct(cal.growth_monthly_pub, { decimals: 2, signed: true }) + " a month", basis: "assumption", note: `${fmtPct(yoy, { decimals: 0, signed: true })} a year, expected path` },
+    { key: "gp", group: "Growth and decay", name: "Public volume growth", value: fmtPct(cal.growth_monthly_pub, { decimals: 2, signed: true }) + " a month", basis: growthMeasured ? "measured" : "assumption", note: `${fmtPct(yoy, { decimals: 0, signed: true })} a year, ${growthMeasured ? "measured trend used as the expected path" : "expected path"}` },
     { key: "gc", group: "Growth and decay", name: "Confidential volume growth", value: fmtPct(cal.growth_monthly_conf, { decimals: 2, signed: true }) + " a month", basis: "mixed", note: `Share ${pct1(cal.confidential_share_start)} measured to ${pct1(cal.confidential_share_target)} assumed by M${fmtInt(H)}`, prov: REF.nearstatsSummary },
     { key: "tm", group: "Valuation", name: "Terminal multiple, raw / used", value: `${mult(cal.terminal_multiple_raw)} / ${mult(cal.terminal_multiple_used)}`, basis: "derived", note: cal.terminal_multiple_clipped ? "Peer median clipped to the cap" : "Peer median, inside the guardrail", prov: REF.coingeckoMarkets, caution: cal.terminal_multiple_clipped === true },
     { key: "px", group: "Valuation", name: "NEAR price", value: fmtUsd(cal.price_usd, { decimals: 2 }), basis: "measured", note: `Current FDV ${fmtUsdCompact(cal.current_fdv_usd)}`, prov: REF.nearstatsSummary },

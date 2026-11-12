@@ -82,6 +82,14 @@ def measured_windows(snapshot: Mapping[str, Any], n_windows: int) -> dict[str, A
     return {"gross_take_bps": takes, "capture_ratio": captures, "n_windows": len(takes)}
 
 
+def _registry_source(snapshot: Mapping[str, Any], key: str) -> str:
+    """``source`` of the snapshot's registry entry for ``key`` ("assumption" unless the run replaced it by a measurement)."""
+    for a in snapshot.get("assumptions") or []:
+        if isinstance(a, Mapping) and a.get("key") == key:
+            return str(a.get("source") or "assumption")
+    return "assumption"
+
+
 def _row(p: Mapping[str, Any], *, param: str, label: str, source: str, unit: str, base: float, low: float, high: float,
          key: str, basis: str, transform: Any = None) -> dict[str, Any]:
     def fdv(v: float) -> tuple[float, float]:
@@ -113,8 +121,10 @@ def tornado_rows(snapshot: Mapping[str, Any]) -> tuple[dict[str, Any], list[dict
     # assumptions: registry range ---------------------------------------------------------------------
     for key, (prim, label) in ASSUMPTION_PARAMS.items():
         lo, hi = _assumption_range(snapshot, key)
-        rows.append(_row(p, param=key, label=label, source="assumption", unit=units.get(key, ""), base=float(p[prim]),
-                         low=lo, high=hi, key=prim, basis=f"registry range [{lo:g}, {hi:g}]"))
+        measured = _registry_source(snapshot, key) == "measured"  # e.g. volume growth, replaced by a fit this run
+        rows.append(_row(p, param=key, label=label, source="measured" if measured else "assumption", unit=units.get(key, ""), base=float(p[prim]),
+                         low=lo, high=hi, key=prim,
+                         basis=f"measured 90% interval [{lo:g}, {hi:g}]" if measured else f"registry range [{lo:g}, {hi:g}]"))
 
     # derived: terminal multiple ----------------------------------------------------------------------
     m_lo = _assumption_value(snapshot, "terminal_multiple_floor")

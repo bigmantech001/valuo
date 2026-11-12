@@ -876,7 +876,7 @@ def _section_reproduce(snap: Snapshot) -> str:
     cmd = f"uv run python -m valuo.reproduce {args}".strip()
     return "\n".join([
         "```bash",
-        "# from the repo root; no API keys; ~20-60 s wall clock",
+        "# from the repo root; no API keys; about 8 minutes wall clock (the live quote race and rate-limited NearBlocks sampling dominate)",
         "make reproduce          # == cd quant && uv run python -m valuo.reproduce   (canonical artifacts/)",
         "make test               # offline unit tests + invariant checks against artifacts/",
         f"# this snapshot was produced by: cd quant && {cmd}",

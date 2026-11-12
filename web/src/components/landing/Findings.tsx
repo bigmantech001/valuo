@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { fmtBps, fmtCompact, fmtInt, fmtNear, fmtNearCompact, fmtNum, fmtPct, fmtUsdCompact } from "@/lib/format";
 import { MethodNote } from "@/components/ui/Section";
 import { ProvenanceBadge } from "@/components/provenance/ProvenanceBadge";
-import { ARCHETYPE_SHORT, VENUE_LABEL, confidentialIsAssumed, fmtEvidenceValue, fmtSolveValue, fmtSpan, fmtTimes, minus, numberWord, rankPhrase, signTone, type LandingData, type SolveView } from "./landingData";
+import { ARCHETYPE_SHORT, VENUE_LABEL, confidentialBand, confidentialIsAssumed, confidentialIsEstimated, fmtEvidenceValue, fmtSolveValue, fmtSpan, fmtTimes, minus, numberWord, rankPhrase, signTone, type LandingData, type SolveView } from "./landingData";
 import { LandingSection, SectionHeader, TextLink } from "./SectionHeader";
 
 const TONE_TEXT = { emerald: "text-emerald", crimson: "text-crimson", neutral: "text-ink" } as const;
@@ -68,7 +68,7 @@ export function Findings({ data }: { data: LandingData }) {
       value: fmtSolveValue(x.unit, x.requiredValue),
       note: (
         <>
-          {EVIDENCE_PREFIX[x.param] ?? "Measured"} <B>{fmtEvidenceValue(x)}</B>
+          {x.param === "confidential_share_target" && !x.evidenceIsAssumption ? (confidentialIsEstimated(volume) ? "On-chain estimate" : "Measured") : (EVIDENCE_PREFIX[x.param] ?? "Measured")} <B>{fmtEvidenceValue(x)}</B>
           {x.param === "terminal_multiple" && x.modelCap !== null ? <>; model cap <B>{fmtSolveValue("x", x.modelCap)}</B></> : null}
         </>
       ),
@@ -338,6 +338,11 @@ export function Findings({ data }: { data: LandingData }) {
           <>
             The confidential share is not measured this run: NearStats reported <B>{fmtPct(volume.confidentialShareReported, { decimals: 2 })}</B> against{" "}
             <B>{fmtUsdCompact(volume.confidentialTvl)}</B> of confidential TVL, so the model falls back to an assumed <B>{fmtPct(volume.confidentialShare30d, { decimals: 0 })}</B>.{" "}
+          </>
+        ) : confidentialIsEstimated(volume) ? (
+          <>
+            About <B>{fmtPct(volume.confidentialShare30d, { decimals: 1 })}</B> of volume ran through confidential execution, estimated on-chain from Confidential Intents Treasury flows over the last 24 hours
+            {confidentialBand(volume) ? <> ({confidentialBand(volume)})</> : null}; NearStats&apos; own split failed the plausibility check.{" "}
           </>
         ) : volume.confidentialShare30d !== null ? (
           <>

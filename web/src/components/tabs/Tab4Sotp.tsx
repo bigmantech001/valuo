@@ -45,7 +45,7 @@ export function Tab4Sotp({ snapshot, manifest }: TabProps) {
   return (
     <div className="space-y-12">
       <VerdictStrip sotp={sotp} totalSupplyNear={snapshot.near_rpc?.total_supply_near ?? null} />
-      <WhatYouHaveToBelieve sensitivity={snapshot.sensitivity} />
+      <WhatYouHaveToBelieve sensitivity={snapshot.sensitivity} assumptions={snapshot.assumptions} />
       <ScenarioWithForecast
         slice={slice}
         regimeOptions={regimeOptions}

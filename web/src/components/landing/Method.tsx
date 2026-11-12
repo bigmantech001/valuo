@@ -1,5 +1,5 @@
 import { fmtBytes, fmtInt, fmtPct, fmtUsdCompact } from "@/lib/format";
-import { confidentialIsAssumed, type LandingData } from "./landingData";
+import { confidentialBand, confidentialIsAssumed, confidentialIsEstimated, type LandingData } from "./landingData";
 import { LandingSection, SectionHeader } from "./SectionHeader";
 
 const SOURCE_LABEL: Record<string, { label: string; what: string }> = {
@@ -59,7 +59,14 @@ export function Method({ data }: { data: LandingData | null }) {
             v: `Confidential share: NearStats reported ${fmtPct(data.volume.confidentialShareReported, { decimals: 4 })} of volume against ${fmtUsdCompact(data.volume.confidentialTvl)} of confidential TVL, which fails the plausibility check, so this run uses the ${fmtPct(data.volume.confidentialShare30d, { decimals: 0 })} registry assumption and grades the claim as an assumption.`,
           },
         ]
-      : []),
+      : data && confidentialIsEstimated(data.volume)
+        ? [
+            {
+              k: "Estimates labelled",
+              v: `Confidential share: NearStats reported ${fmtPct(data.volume.confidentialShareReported, { decimals: 4 })} of volume against ${fmtUsdCompact(data.volume.confidentialTvl)} of confidential TVL, which fails the plausibility check, so this run estimates the share on-chain from Confidential Intents Treasury flows over the last 24 hours: ${fmtPct(data.volume.confidentialShare30d, { decimals: 1 })}${confidentialBand(data.volume) ? ` (${confidentialBand(data.volume)})` : ""}. The claim is graded derived, not verified.`,
+            },
+          ]
+        : []),
     { k: "Negatives kept", v: "Corridors where 1Click trails, clipped multiples, unverified TVL and thin samples are printed, not filtered." },
   ];
 

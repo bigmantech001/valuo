@@ -112,7 +112,7 @@ export function Tab3Supply({ snapshot }: TabProps) {
         </StatGrid>
       </div>
 
-      <RegimeLab inputs={inputs} missing={missing} regimeLabels={regimeLabels} portChecks={portChecks} epochStartHeight={epoch} currentDailyVolumeUsd={currentDailyVolumeUsd} />
+      <RegimeLab inputs={inputs} missing={missing} regimeLabels={regimeLabels} portChecks={portChecks} epochStartHeight={epoch} currentDailyVolumeUsd={currentDailyVolumeUsd} growthMeasured={(snapshot?.assumptions ?? []).some((a) => a.key === "public_volume_growth_yoy" && a.source === "measured")} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <IssuanceCard rpc={rpc} />

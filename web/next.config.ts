@@ -11,6 +11,21 @@ const nextConfig: NextConfig = {
   // Server code reads the committed pipeline outputs with fs at runtime; include the build-time copy in every
   // server bundle (see scripts/bundle-data.mjs).
   outputFileTracingIncludes: { "/**": ["./.valuo-data/**/*"] },
+  poweredByHeader: false,
+  // Baseline hardening. No Content-Security-Policy: the wallet selector loads third-party wallet frames and scripts.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

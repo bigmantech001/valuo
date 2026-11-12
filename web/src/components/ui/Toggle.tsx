@@ -23,10 +23,10 @@ export interface ToggleProps<T extends string> {
 /** Segmented control (radio semantics) for regime / scenario switches. */
 export function Toggle<T extends string>({ options, value, onChange, label, size = "sm", className }: ToggleProps<T>) {
   return (
-    <div className={cn("inline-flex flex-col gap-1", className)}>
+    <div className={cn("inline-flex max-w-full flex-col gap-1", className)}>
       {label ? <span className="text-[13px] text-muted first-letter:uppercase">{label}</span> : null}
-      <div role="radiogroup" aria-label={typeof label === "string" ? label : undefined} className="inline-flex rounded-md border border-border-strong bg-surface p-0.5">
-        {options.map((o, i) => {
+      <div role="radiogroup" aria-label={typeof label === "string" ? label : undefined} className="inline-flex max-w-full flex-wrap gap-0.5 rounded-md border border-border-strong bg-surface p-0.5">
+        {options.map((o) => {
           const selected = o.value === value;
           return (
             <button
@@ -40,7 +40,6 @@ export function Toggle<T extends string>({ options, value, onChange, label, size
               className={cn(
                 "whitespace-nowrap rounded-[5px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-40",
                 size === "sm" ? "px-3 py-1 text-[13px]" : "px-3.5 py-1.5 text-[14px]",
-                i > 0 && "ml-0.5",
                 selected ? "bg-ink text-surface" : "text-muted hover:bg-surface-2 hover:text-ink",
               )}
             >

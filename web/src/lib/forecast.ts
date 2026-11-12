@@ -237,6 +237,8 @@ export function parseForecastValue(raw: unknown): ForecastValue | null {
   const horizon = validDate(r.horizon) ? r.horizon : null;
   const s = r.settings && typeof r.settings === "object" && !Array.isArray(r.settings) ? (r.settings as Record<string, unknown>) : null;
   if (!created_at || !sha || target === null || !horizon || !s) return null;
+  // A forecast is about the future: the horizon must fall after the day it was written.
+  if (horizon <= created_at.slice(0, 10)) return null;
   const regime = REGIMES.find((k) => k === s.regime);
   const settings = {
     growth_yoy: num(s.growth_yoy, -1, 100),
@@ -261,11 +263,36 @@ export function parseForecastValue(raw: unknown): ForecastValue | null {
   };
 }
 
+/** Newest records kept per account on the board. */
+export const MAX_FORECASTS_PER_ACCOUNT = 5;
+
+/** A known (block height, time) pair, used to estimate when another block was produced. */
+export interface BlockAnchor {
+  block_height: number;
+  time_ms: number;
+}
+const BLOCK_MS = 600; // NEAR mainnet block time, about 0.6 s
+const WRITE_TOLERANCE_MS = 2 * 86_400_000;
+
+/**
+ * False when the record's self-declared `created_at` disagrees with the time of the block that stored it, which is
+ * how a backdated forecast (written after the outcome, dated before it) looks. The block time is estimated from the
+ * snapshot's block; the tolerance is two days plus 25% of the distance to that block, to absorb block-time drift.
+ * Records without a block height cannot be checked and pass.
+ */
+export function writeTimeConsistent(e: Pick<ForecastEntry, "block_height" | "value">, anchor: BlockAnchor | null): boolean {
+  if (!anchor || e.block_height === null) return true;
+  const offsetMs = (e.block_height - anchor.block_height) * BLOCK_MS;
+  const estimated = anchor.time_ms + offsetMs;
+  const created = Date.parse(e.value.created_at);
+  return Math.abs(created - estimated) <= WRITE_TOLERANCE_MS + 0.25 * Math.abs(offsetMs);
+}
+
 /**
  * Flatten a SocialDB `get` tree ({account: {valuo: {forecast: {key: {"": value, ":block": h}}}}}, as returned with
  * with_block_height) into entries. Invalid accounts, keys and values are skipped and counted.
  */
-export function parseForecastTree(tree: unknown, maxEntries = 500): { entries: ForecastEntry[]; rejected: number } {
+export function parseForecastTree(tree: unknown, maxEntries = 500, perAccount = MAX_FORECASTS_PER_ACCOUNT): { entries: ForecastEntry[]; rejected: number } {
   const entries: ForecastEntry[] = [];
   let rejected = 0;
   if (!tree || typeof tree !== "object" || Array.isArray(tree)) return { entries, rejected };
@@ -277,8 +304,12 @@ export function parseForecastTree(tree: unknown, maxEntries = 500): { entries: F
     let cur: unknown = node;
     for (const part of FORECAST_PATH) cur = cur && typeof cur === "object" ? (cur as Record<string, unknown>)[part] : undefined;
     if (!cur || typeof cur !== "object") continue;
-    for (const [key, leaf] of Object.entries(cur as Record<string, unknown>)) {
+    // Keys are UTC timestamps, so a reverse sort is newest first; only the newest `perAccount` valid records of an
+    // account are kept, so one account cannot crowd out the others.
+    let kept = 0;
+    for (const [key, leaf] of Object.entries(cur as Record<string, unknown>).sort((x, y) => y[0].localeCompare(x[0]))) {
       if (key.startsWith(":")) continue;
+      if (kept >= perAccount) break;
       if (!KEY_RE.test(key) || !leaf || typeof leaf !== "object") {
         rejected++;
         continue;
@@ -291,6 +322,7 @@ export function parseForecastTree(tree: unknown, maxEntries = 500): { entries: F
       }
       const bh = l[":block"];
       entries.push({ account, key, block_height: typeof bh === "number" && Number.isSafeInteger(bh) && bh > 0 ? bh : null, value, verified_onchain: false });
+      kept++;
       if (entries.length >= maxEntries) return { entries, rejected };
     }
   }
