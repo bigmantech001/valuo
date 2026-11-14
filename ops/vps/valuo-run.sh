@@ -80,7 +80,7 @@ if git diff --cached --quiet; then
   echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) valuo $MODE done (nothing new)"
   exit 0
 fi
-git -c user.name="${VALUO_GIT_NAME:-valuo-bot}" -c user.email="${VALUO_GIT_EMAIL:-valuo-bot@users.noreply.github.com}" commit --quiet -m "$msg"
+git -c user.name="${VALUO_GIT_NAME:-bigmantech001}" -c user.email="${VALUO_GIT_EMAIL:-106829970+bigmantech001@users.noreply.github.com}" commit --quiet -m "$msg"
 
 # Anchor the committed manifest's hashes on NEAR mainnet (optional). valuo.anchor signs with the account key in
 # ~/.near-credentials/mainnet/<account>.json via the system openssl. A failure is logged, never fatal: the data
@@ -116,7 +116,7 @@ for attempt in 1 2 3 4 5; do
   fi
   echo "push rejected; rebasing onto origin/$BRANCH (attempt $attempt)"
   git fetch --quiet origin "$BRANCH"
-  if ! git rebase --quiet -X theirs "origin/$BRANCH"; then
+  if ! git -c user.name="${VALUO_GIT_NAME:-bigmantech001}" -c user.email="${VALUO_GIT_EMAIL:-106829970+bigmantech001@users.noreply.github.com}" rebase --quiet -X theirs "origin/$BRANCH"; then
     git rebase --abort || true
     echo "rebase failed; leaving the data commit local for the next run to retry"
     exit 1
