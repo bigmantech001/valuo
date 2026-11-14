@@ -4,7 +4,7 @@
 
 Valuo is an Investment Committee (IC) terminal and a Python quant engine. It reads NEAR mainnet and NEAR Intents live, races NEAR Intents' 1Click router against Relay, LI.FI and Across on the same trades, values the cash flows NEAR holders can point to with a seeded 10,000-path Monte Carlo, and then inverts the model: what would each input have to be for the model to equal the market price? Everything is judged by one comparison: **what NEAR's market value requires vs what the live data shows today**, condition by condition, graded *on track*, *behind* or *against*.
 
-Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not investment advice · App: **[usevaluo.vercel.app](https://usevaluo.vercel.app)** · Demo: `<VIDEO_URL>` · Code: private until submission, access on request
+Built for the NEAR Hackathon 2026, `[ 02 / INV ] Investment Thesis` track · Not investment advice · App: **[usevaluo.vercel.app](https://usevaluo.vercel.app)** · Demo film (3 min): **[youtu.be/FtdepUBz7pc](https://youtu.be/FtdepUBz7pc)** · Demo post: **[x.com/big_mantech](https://x.com/big_mantech/status/2121394007787884924)**
 
 **Judges, start here:** open [`/terminal#thesis`](https://usevaluo.vercel.app/terminal#thesis) for the bull-case scorecard (no wallet, no login), then [`/terminal?verify=rehash`](https://usevaluo.vercel.app/terminal?verify=rehash) to re-hash every stored source payload in your browser. To rebuild every number yourself: `make sync && make reproduce` (no API keys). A claim-by-claim checklist is in **[JUDGES.md](JUDGES.md)**.
 
