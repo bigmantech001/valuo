@@ -1,1 +1,1 @@
-{"message":"Quote amount exceeds the maximum for this pair","errorCode":"AMOUNT_TOO_HIGH","requestId":"0x17952411161df99efaf7196793053d469a2765be0586417a832d444a253922d7"}
+{"message":"Amount is higher than the available liquidity. Max amount is $1,545,126 USD. Requested amount exceeds provisioned liquidity.","errorCode":"INSUFFICIENT_LIQUIDITY","requestId":"0x1795327516944bd78cedbf26e018c03edee2a7c62ee5ac7ee3a5ea86f62bdf9f"}
