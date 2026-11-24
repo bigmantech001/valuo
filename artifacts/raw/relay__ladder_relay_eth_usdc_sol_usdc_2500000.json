@@ -1,1 +1,1 @@
-{"message":"Amount is higher than the available liquidity. Max amount is $1,463,226 USD. Requested amount exceeds provisioned liquidity.","errorCode":"INSUFFICIENT_LIQUIDITY","requestId":"0x17954139162a461907a731fba434290a91c71aaaaaa279413bddde9aa9aff6b9"}
+{"message":"Amount is higher than the available liquidity. Max amount is $1,353,169 USD. Requested amount exceeds provisioned liquidity.","errorCode":"INSUFFICIENT_LIQUIDITY","requestId":"0x179550031758d7a33458eb2a477019a280e01e0ffc9c7d13e5407065014e52a2"}
